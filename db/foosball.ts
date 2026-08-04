@@ -39,8 +39,9 @@ const schemaStatements = [
 ];
 
 function d1() {
-  if (!env.DB) throw new Error("La base de données n’est pas disponible.");
-  return env.DB as D1Database;
+  const runtimeEnv = env as unknown as { DB?: D1Database };
+  if (!runtimeEnv.DB) throw new Error("La base de données n’est pas disponible.");
+  return runtimeEnv.DB;
 }
 
 export async function initializeDatabase() {
@@ -137,7 +138,7 @@ export async function addMatch(args: {
   const blueElo = average(args.blue);
   const expectedRed = 1 / (1 + 10 ** ((blueElo - redElo) / 400));
   const redWon = args.redScore > args.blueScore;
-  const delta = Math.max(1, Math.round(32 * ((redWon ? 1 : 0) - expectedRed)));
+  const delta = Math.max(1, Math.abs(Math.round(32 * ((redWon ? 1 : 0) - expectedRed))));
   const signedDelta = redWon ? delta : -delta;
   const id = crypto.randomUUID();
   const now = Date.now();
