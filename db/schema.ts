@@ -6,6 +6,8 @@ export const players = sqliteTable("players", {
   name: text("name").notNull(),
   preferredPosition: text("preferred_position").notNull().default("polyvalent"),
   elo: integer("elo").notNull().default(1000),
+  attackElo: integer("attack_elo").notNull().default(1000),
+  defenseElo: integer("defense_elo").notNull().default(1000),
   wins: integer("wins").notNull().default(0),
   losses: integer("losses").notNull().default(0),
   games: integer("games").notNull().default(0),

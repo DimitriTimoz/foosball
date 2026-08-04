@@ -8,6 +8,8 @@ type Player = {
   name: string;
   preferred_position: "attaquant" | "defenseur" | "polyvalent";
   elo: number;
+  attack_elo: number;
+  defense_elo: number;
   wins: number;
   losses: number;
   games: number;
@@ -167,7 +169,7 @@ export function BuroBallApp() {
     if (members.length === 1) {
       return [{ id: members[0].id, position: members[0].preferred_position === "defenseur" ? "defenseur" : "attaquant" }];
     }
-    const defender = [...members].sort((a, b) => positionScore(b, "defenseur") - positionScore(a, "defenseur"))[0];
+    const defender = [...members].sort((a, b) => roleScore(b, "defenseur") - roleScore(a, "defenseur"))[0];
     return members.map((member) => ({ id: member.id, position: member.id === defender.id ? "defenseur" : "attaquant" }));
   }
 
@@ -184,9 +186,14 @@ export function BuroBallApp() {
       }
     }
     const rated = uniquePartitions.map(([redIds, blueIds]) => {
-      const avg = (ids: string[]) => ids.reduce((sum, id) => sum + data.players.find((p) => p.id === id)!.elo, 0) / ids.length;
-      const gap = Math.round(Math.abs(avg(redIds) - avg(blueIds)));
-      return { red: assignPositions(redIds), blue: assignPositions(blueIds), gap, randomScore: gap + Math.random() * 38 };
+      const red = assignPositions(redIds);
+      const blue = assignPositions(blueIds);
+      const teamRating = (members: DraftMember[]) => members.reduce((sum, member) => {
+        const player = data.players.find((item) => item.id === member.id)!;
+        return sum + positionalElo(player, member.position);
+      }, 0) / members.length;
+      const gap = Math.round(Math.abs(teamRating(red) - teamRating(blue)));
+      return { red, blue, gap, randomScore: gap + Math.random() * 38 };
     }).sort((a, b) => a.randomScore - b.randomScore);
     const choice = rated[Math.floor(Math.random() * Math.min(2, rated.length))];
     if (Math.random() > .5) setDraw({ red: choice.blue, blue: choice.red, gap: choice.gap });
@@ -243,6 +250,7 @@ export function BuroBallApp() {
                 <div className="stat-top"><span>MON ELO</span><span className="live-dot">● LIVE</span></div>
                 <strong>{currentPlayer?.elo ?? 1000}</strong>
                 <div className="elo-scale"><i style={{ width: `${Math.min(100, Math.max(12, ((currentPlayer?.elo ?? 1000) - 800) / 6))}%` }} /></div>
+                <div className="role-elos"><span><i>A</i><b>{currentPlayer?.attack_elo ?? 1000}</b></span><span><i>D</i><b>{currentPlayer?.defense_elo ?? 1000}</b></span></div>
                 <div className="stat-bottom"><span>{currentPlayer?.wins ?? 0} victoires</span><span>{currentPlayer?.games ?? 0} matchs</span></div>
               </div>
               <div className="rank-card">
@@ -267,7 +275,7 @@ export function BuroBallApp() {
                     <div className="podium-row" key={player.id}>
                       <span className={`rank-number rank-${index + 1}`}>{index + 1}</span>
                       <div className="player-avatar">{initials(player.name)}</div>
-                      <div><strong>{player.name}</strong><small>{player.wins} V · {player.losses} D</small></div>
+                      <div><strong>{player.name}</strong><small>A {player.attack_elo} · D {player.defense_elo}</small></div>
                       <b>{player.elo}</b>
                     </div>
                   ))}
@@ -280,14 +288,14 @@ export function BuroBallApp() {
 
         {view === "classement" && (
           <section className="page-section">
-            <div className="page-title"><div><p className="eyebrow">LA LIGUE</p><h1>Classement Elo</h1><p>Le niveau de chacun, recalculé après chaque match.</p></div><button className="secondary-button" onClick={() => setPlayerOpen(true)}>＋ Ajouter un joueur</button></div>
+            <div className="page-title"><div><p className="eyebrow">LA LIGUE</p><h1>Classement Elo</h1><p>Un niveau général, plus un indice pour chaque poste réellement joué.</p></div><button className="secondary-button" onClick={() => setPlayerOpen(true)}>＋ Ajouter un joueur</button></div>
             <div className="leaderboard panel">
-              <div className="table-head"><span>RANG</span><span>JOUEUR</span><span>POSTE</span><span>V / D</span><span>ELO</span></div>
+              <div className="table-head"><span>RANG</span><span>JOUEUR</span><span>ELO PAR POSTE</span><span>V / D</span><span>GÉNÉRAL</span></div>
               {data.players.map((player, index) => (
                 <div className="leader-row" key={player.id}>
                   <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                   <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong>{player.email === data.user.email && <small>Vous</small>}</div></div>
-                  <span className="position-pill">{positionLabel(player.preferred_position)}</span>
+                  <span className="position-ratings"><b className="attack-rating">A {player.attack_elo}</b><b className="defense-rating">D {player.defense_elo}</b></span>
                   <span className="record"><b>{player.wins}</b> / {player.losses}</span>
                   <strong className="elo-number">{player.elo}</strong>
                 </div>
@@ -298,7 +306,7 @@ export function BuroBallApp() {
 
         {view === "equipes" && (
           <section className="page-section team-builder-page">
-            <div className="page-title"><div><p className="eyebrow">TIRAGE ÉQUILIBRÉ</p><h1>Qui joue ?</h1><p>Choisissez 2 à 4 collègues. BuroBall équilibre l’Elo et attribue les postes.</p></div></div>
+            <div className="page-title"><div><p className="eyebrow">TIRAGE ÉQUILIBRÉ</p><h1>Qui joue ?</h1><p>Choisissez 2 à 4 collègues. BuroBall utilise l’Elo de chaque poste pour équilibrer.</p></div></div>
             <div className="builder-layout">
               <div className="panel selection-panel">
                 <div className="selection-title"><h2>Sélection</h2><span>{drawIds.length}/4</span></div>
@@ -414,7 +422,7 @@ function PlayerModal({ onClose, onSubmit, busy }: { onClose: () => void; onSubmi
 }
 
 function DrawResult({ draw, players, onAgain, onUse }: { draw: Draw; players: Player[]; onAgain: () => void; onUse: () => void }) {
-  const team = (side: "red" | "blue") => <div className={`draw-team ${side}`}><div className="draw-team-title"><span>ÉQUIPE {side === "red" ? "ROUGE" : "BLEUE"}</span><b>{Math.round(draw[side].reduce((sum, m) => sum + players.find((p) => p.id === m.id)!.elo, 0) / draw[side].length)} Elo</b></div>{draw[side].map((member) => { const p = players.find((player) => player.id === member.id)!; return <div className="draw-player" key={member.id}><div className="player-avatar">{initials(p.name)}</div><div><strong>{p.name}</strong><small>{positionLabel(member.position)}</small></div><b>{p.elo}</b></div>; })}</div>;
+  const team = (side: "red" | "blue") => <div className={`draw-team ${side}`}><div className="draw-team-title"><span>ÉQUIPE {side === "red" ? "ROUGE" : "BLEUE"}</span><b>{Math.round(draw[side].reduce((sum, m) => { const p = players.find((player) => player.id === m.id)!; return sum + positionalElo(p, m.position); }, 0) / draw[side].length)} Elo poste</b></div>{draw[side].map((member) => { const p = players.find((player) => player.id === member.id)!; return <div className="draw-player" key={member.id}><div className="player-avatar">{initials(p.name)}</div><div><strong>{p.name}</strong><small>{positionLabel(member.position)}</small></div><b>{positionalElo(p, member.position)}</b></div>; })}</div>;
   return <div className="draw-result"><div className="balance-badge">ÉCART DE {draw.gap} ELO · ÉQUILIBRÉ</div>{team("red")}<div className="versus">VS</div>{team("blue")}<div className="draw-actions"><button className="secondary-button" onClick={onAgain}>↻ Retirer</button><button className="primary-button" onClick={onUse}>Utiliser ce tirage →</button></div></div>;
 }
 
@@ -422,8 +430,12 @@ function EmptyState({ text, action, onClick }: { text: string; action: string; o
   return <div className="empty-state"><span>●</span><p>{text}</p><button onClick={onClick}>{action} →</button></div>;
 }
 
-function positionScore(player: Player, position: "attaquant" | "defenseur") {
-  return player.preferred_position === position ? 3 : player.preferred_position === "polyvalent" ? 2 : 0;
+function positionalElo(player: Player, position: "attaquant" | "defenseur") {
+  return position === "attaquant" ? player.attack_elo : player.defense_elo;
+}
+function roleScore(player: Player, position: "attaquant" | "defenseur") {
+  const preference = player.preferred_position === position ? 3 : player.preferred_position === "polyvalent" ? 2 : 0;
+  return positionalElo(player, position) + preference * 75;
 }
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function names(members: Member[]) { return members.map((member) => member.name.split(" ")[0]).join(" & "); }

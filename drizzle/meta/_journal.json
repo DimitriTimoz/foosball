@@ -22,6 +22,13 @@
       "when": 1785860948853,
       "tag": "0002_woozy_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785861372213,
+      "tag": "0003_mean_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

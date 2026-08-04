@@ -12,6 +12,8 @@ const schemaStatements = [
     name TEXT NOT NULL,
     preferred_position TEXT NOT NULL DEFAULT 'polyvalent',
     elo INTEGER NOT NULL DEFAULT 1000,
+    attack_elo INTEGER NOT NULL DEFAULT 1000,
+    defense_elo INTEGER NOT NULL DEFAULT 1000,
     wins INTEGER NOT NULL DEFAULT 0,
     losses INTEGER NOT NULL DEFAULT 0,
     games INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +59,28 @@ function d1() {
 export async function initializeDatabase() {
   const db = d1();
   await db.batch(schemaStatements.map((statement) => db.prepare(statement)));
+  const columns = await db.prepare("PRAGMA table_info(players)").all<{ name: string }>();
+  const names = new Set(columns.results.map((column) => column.name));
+  if (!names.has("attack_elo")) {
+    await db.prepare("ALTER TABLE players ADD COLUMN attack_elo INTEGER NOT NULL DEFAULT 1000").run();
+    await db.prepare(`UPDATE players SET attack_elo = 1000 + COALESCE((
+      SELECT SUM(CASE
+        WHEN (mp.side = 'red' AND m.red_score > m.blue_score) OR (mp.side = 'blue' AND m.blue_score > m.red_score)
+        THEN m.elo_delta ELSE -m.elo_delta END)
+      FROM match_players mp JOIN matches m ON m.id = mp.match_id
+      WHERE mp.player_id = players.id AND mp.position = 'attaquant'
+    ), 0)`).run();
+  }
+  if (!names.has("defense_elo")) {
+    await db.prepare("ALTER TABLE players ADD COLUMN defense_elo INTEGER NOT NULL DEFAULT 1000").run();
+    await db.prepare(`UPDATE players SET defense_elo = 1000 + COALESCE((
+      SELECT SUM(CASE
+        WHEN (mp.side = 'red' AND m.red_score > m.blue_score) OR (mp.side = 'blue' AND m.blue_score > m.red_score)
+        THEN m.elo_delta ELSE -m.elo_delta END)
+      FROM match_players mp JOIN matches m ON m.id = mp.match_id
+      WHERE mp.player_id = players.id AND mp.position = 'defenseur'
+    ), 0)`).run();
+  }
 }
 
 export async function ensurePlayer(email: string, name: string) {
@@ -205,13 +229,20 @@ export async function addMatch(args: {
 
   const placeholders = playerIds.map(() => "?").join(",");
   const rows = await db
-    .prepare(`SELECT id, elo FROM players WHERE id IN (${placeholders})`)
+    .prepare(`SELECT id, elo, attack_elo, defense_elo FROM players WHERE id IN (${placeholders})`)
     .bind(...playerIds)
     .all();
   if (rows.results.length !== playerIds.length) throw new Error("Un joueur est introuvable.");
-  const ratings = new Map((rows.results as Array<{ id: string; elo: number }>).map((row) => [row.id, row.elo]));
+  const ratings = new Map(
+    (rows.results as Array<{ id: string; elo: number; attack_elo: number; defense_elo: number }>).map((row) => [row.id, row]),
+  );
   const average = (members: MatchMember[]) =>
-    Math.round(members.reduce((sum, member) => sum + (ratings.get(member.id) ?? 1000), 0) / members.length);
+    Math.round(
+      members.reduce((sum, member) => {
+        const rating = ratings.get(member.id);
+        return sum + ((member.position === "attaquant" ? rating?.attack_elo : rating?.defense_elo) ?? 1000);
+      }, 0) / members.length,
+    );
   const redElo = average(args.red);
   const blueElo = average(args.blue);
   const expectedRed = 1 / (1 + 10 ** ((blueElo - redElo) / 400));
@@ -233,19 +264,20 @@ export async function addMatch(args: {
     ...args.blue.map((member) =>
       db.prepare("INSERT INTO match_players (match_id, player_id, side, position) VALUES (?, ?, 'blue', ?)").bind(id, member.id, member.position),
     ),
-    ...args.red.map((member) =>
-      db
-        .prepare("UPDATE players SET elo = elo + ?, games = games + 1, wins = wins + ?, losses = losses + ? WHERE id = ?")
-        .bind(signedDelta, redWon ? 1 : 0, redWon ? 0 : 1, member.id),
-    ),
-    ...args.blue.map((member) =>
-      db
-        .prepare("UPDATE players SET elo = elo - ?, games = games + 1, wins = wins + ?, losses = losses + ? WHERE id = ?")
-        .bind(signedDelta, redWon ? 0 : 1, redWon ? 1 : 0, member.id),
-    ),
+    ...args.red.map((member) => updatePlayerRating(db, member, signedDelta, redWon)),
+    ...args.blue.map((member) => updatePlayerRating(db, member, -signedDelta, !redWon)),
   ];
   await db.batch(statements);
   return { id, delta: Math.abs(signedDelta) };
+}
+
+function updatePlayerRating(db: D1Database, member: MatchMember, delta: number, won: boolean) {
+  const roleColumn = member.position === "attaquant" ? "attack_elo" : "defense_elo";
+  return db
+    .prepare(
+      `UPDATE players SET elo = elo + ?, ${roleColumn} = ${roleColumn} + ?, games = games + 1, wins = wins + ?, losses = losses + ? WHERE id = ?`,
+    )
+    .bind(delta, delta, won ? 1 : 0, won ? 0 : 1, member.id);
 }
 
 export async function seedDemoData() {
@@ -254,19 +286,19 @@ export async function seedDemoData() {
   if ((count?.count ?? 0) > 1) return;
   const now = Date.now();
   const demoPlayers = [
-    ["demo-camille", "Camille", "attaquant", 1184, 14, 7, 21],
-    ["demo-thomas", "Thomas", "defenseur", 1126, 11, 8, 19],
-    ["demo-sofia", "Sofia", "polyvalent", 1068, 9, 9, 18],
-    ["demo-hugo", "Hugo", "attaquant", 1012, 7, 10, 17],
-    ["demo-lea", "Léa", "defenseur", 986, 6, 11, 17],
+    ["demo-camille", "Camille", "attaquant", 1184, 1218, 1050, 14, 7, 21],
+    ["demo-thomas", "Thomas", "defenseur", 1126, 1018, 1172, 11, 8, 19],
+    ["demo-sofia", "Sofia", "polyvalent", 1068, 1062, 1075, 9, 9, 18],
+    ["demo-hugo", "Hugo", "attaquant", 1012, 1048, 972, 7, 10, 17],
+    ["demo-lea", "Léa", "defenseur", 986, 940, 1038, 6, 11, 17],
   ] as const;
   await db.batch(
     demoPlayers.map((p, index) =>
       db
         .prepare(
-          "INSERT OR IGNORE INTO players (id, email, name, preferred_position, elo, wins, losses, games, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT OR IGNORE INTO players (id, email, name, preferred_position, elo, attack_elo, defense_elo, wins, losses, games, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(p[0], p[1], p[2], p[3], p[4], p[5], p[6], now - index * 1000),
+        .bind(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], now - index * 1000),
     ),
   );
   const matchCount = await db.prepare("SELECT COUNT(*) AS count FROM matches").first<{ count: number }>();
