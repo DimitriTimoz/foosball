@@ -107,6 +107,12 @@ export function OfficeFoosApp() {
     const timeout = window.setTimeout(() => setToast(""), 3600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+  useEffect(() => {
+    if (!matchOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [matchOpen]);
 
   const currentPlayer = data?.players.find((player) => player.id === data.user.playerId);
   const firstName = (data?.user.displayName ?? "").split(" ")[0];
@@ -729,9 +735,9 @@ function MatchModal({ players, draft, setDraft, toggleMember, onClose, onSubmit,
     const loser = winner === "red" ? "blue" : "red";
     return { ...current, [`${winner}Score`]: 10, [`${loser}Score`]: current[`${loser}Score`] >= 10 ? 7 : current[`${loser}Score`] };
   });
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <form className="modal match-modal" onSubmit={onSubmit}>
-      <div className="modal-header"><div><p className="eyebrow">NEW MATCH · {format}</p><h2>Who won?</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
+  return <div className="modal-backdrop match-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="modal match-modal" onSubmit={onSubmit} role="dialog" aria-modal="true" aria-labelledby="match-title">
+      <div className="modal-header"><div><p className="eyebrow">NEW MATCH · {format}</p><h2 id="match-title">Who won?</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
       <div className="winner-shortcuts" aria-label="Choose the winning side">
         <button type="button" className={draft.redScore > draft.blueScore ? "active" : ""} onClick={() => setWinner("red")}><span>●</span> Red won</button>
         <button type="button" className={draft.blueScore > draft.redScore ? "active" : ""} onClick={() => setWinner("blue")}><span>●</span> Blue won</button>
