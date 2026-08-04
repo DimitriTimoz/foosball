@@ -32,9 +32,13 @@ const emptyDraft = { red: [] as DraftMember[], blue: [] as DraftMember[], redSco
 
 export function BuroBallApp() {
   const [data, setData] = useState<Dashboard | null>(null);
+  const [access, setAccess] = useState<"loading" | "joining" | "required" | "allowed">("loading");
+  const [inviteError, setInviteError] = useState("");
   const [view, setView] = useState<"accueil" | "classement" | "equipes">("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
   const [draft, setDraft] = useState(emptyDraft);
   const [drawIds, setDrawIds] = useState<string[]>([]);
   const [draw, setDraw] = useState<Draw | null>(null);
@@ -42,15 +46,38 @@ export function BuroBallApp() {
   const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
-    const response = await fetch("/api/bootstrap", { cache: "no-store" });
-    const payload = (await response.json()) as Dashboard & { error?: string };
+    let response = await fetch("/api/bootstrap", { cache: "no-store" });
+    let payload = (await response.json()) as Dashboard & { error?: string; code?: string };
+    if (response.status === 403 && payload.code === "invite_required") {
+      const token = new URLSearchParams(window.location.search).get("invite");
+      if (!token) {
+        setAccess("required");
+        return;
+      }
+      setAccess("joining");
+      const redeemResponse = await fetch("/api/invitations/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const redeemPayload = await redeemResponse.json() as { error?: string };
+      if (!redeemResponse.ok) {
+        setInviteError(redeemPayload.error ?? "Cette invitation ne peut pas être utilisée.");
+        setAccess("required");
+        return;
+      }
+      window.history.replaceState({}, "", "/");
+      response = await fetch("/api/bootstrap", { cache: "no-store" });
+      payload = (await response.json()) as Dashboard & { error?: string; code?: string };
+    }
     if (!response.ok) throw new Error(payload.error ?? "Impossible de charger BuroBall.");
     setData(payload);
+    setAccess("allowed");
   }, []);
 
-  useEffect(() => { load().catch((error) => setToast(error.message)); }, [load]);
+  useEffect(() => { load().catch((error) => { setToast(error.message); setAccess("required"); }); }, [load]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -104,6 +131,24 @@ export function BuroBallApp() {
     } finally { setBusy(false); }
   }
 
+  async function createInvite() {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/invitations", { method: "POST" });
+      const payload = await response.json() as { token?: string; error?: string };
+      if (!response.ok || !payload.token) throw new Error(payload.error ?? "Impossible de créer l’invitation.");
+      setInviteLink(`${window.location.origin}/?invite=${payload.token}`);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Une erreur est survenue.");
+    } finally { setBusy(false); }
+  }
+
+  async function copyInvite() {
+    if (!inviteLink) return;
+    await navigator.clipboard.writeText(inviteLink);
+    setToast("Lien d’invitation copié");
+  }
+
   function toggleMember(side: "red" | "blue", player: Player) {
     const other = side === "red" ? "blue" : "red";
     if (draft[other].some((member) => member.id === player.id)) return setToast("Ce joueur est déjà dans l’autre équipe.");
@@ -154,8 +199,12 @@ export function BuroBallApp() {
     setMatchOpen(true);
   }
 
+  if (!data && access === "required") {
+    return <InvitationRequired error={inviteError} />;
+  }
+
   if (!data) {
-    return <main className="loading-screen"><div className="loading-brand"><span>●</span> BuroBall</div><div className="loading-bar"><i /></div><p>On prépare la table…</p></main>;
+    return <main className="loading-screen"><div className="loading-brand"><span>●</span> BuroBall</div><div className="loading-bar"><i /></div><p>{access === "joining" ? "Invitation acceptée, bienvenue dans la ligue…" : "On prépare la table…"}</p></main>;
   }
 
   const navItems = [
@@ -172,6 +221,7 @@ export function BuroBallApp() {
           {navItems.map(([id, , label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}
         </nav>
         <div className="top-actions">
+          <button className="invite-button" onClick={() => setInviteOpen(true)}><span>↗</span> Inviter</button>
           <button className="icon-button" aria-label="Ajouter un joueur" title="Ajouter un joueur" onClick={() => setPlayerOpen(true)}>＋</button>
           <button className="primary-button compact" onClick={() => setMatchOpen(true)}>＋ <span>Nouveau match</span></button>
           <div className="avatar" title={data.user.displayName}>{initials(data.user.displayName)}</div>
@@ -277,9 +327,40 @@ export function BuroBallApp() {
 
       {matchOpen && <MatchModal players={data.players} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
       {playerOpen && <PlayerModal onClose={() => setPlayerOpen(false)} onSubmit={submitPlayer} busy={busy} />}
+      {inviteOpen && <InviteModal link={inviteLink} busy={busy} onCreate={createInvite} onCopy={copyInvite} onClose={() => setInviteOpen(false)} />}
       {toast && <div className="toast" role="status"><span>●</span>{toast}</div>}
     </div>
   );
+}
+
+function InvitationRequired({ error }: { error: string }) {
+  return <main className="invite-gate">
+    <section className="invite-gate-card">
+      <div className="brand brand-large"><span className="brand-ball">●</span> BuroBall</div>
+      <div className="gate-lock">↗</div>
+      <p className="eyebrow">LIGUE PRIVÉE</p>
+      <h1>Il vous faut<br />une invitation.</h1>
+      <p>{error || "Cette ligue est réservée aux collègues invités. Demandez un nouveau lien à un membre de BuroBall."}</p>
+      <a className="secondary-button" href="/signout-with-chatgpt?return_to=/">Changer de compte</a>
+    </section>
+    <aside className="invite-gate-aside" aria-hidden="true"><span>10</span><i>—</i><span>7</span><p>ACCÈS SUR INVITATION</p></aside>
+  </main>;
+}
+
+function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; busy: boolean; onCreate: () => void; onCopy: () => void; onClose: () => void }) {
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="modal invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+      <div className="modal-header"><div><p className="eyebrow">LIGUE PRIVÉE</p><h2 id="invite-title">Inviter un collègue</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
+      <div className="invite-illustration"><span>●</span><i>→</i><span>●</span></div>
+      <p className="invite-copy">Créez un lien personnel. Il est valable pendant 7 jours et ne peut être utilisé qu’une seule fois.</p>
+      {link ? <>
+        <label className="field"><span>Lien d’invitation</span><input readOnly value={link} onFocus={(event) => event.currentTarget.select()} /></label>
+        <button className="primary-button full" onClick={onCopy}>Copier le lien</button>
+        <button className="text-button" onClick={onCreate} disabled={busy}>Créer un autre lien</button>
+      </> : <button className="primary-button full" onClick={onCreate} disabled={busy}>{busy ? "Création…" : "Créer un lien d’invitation →"}</button>}
+      <div className="invite-safety"><b>Usage unique</b><span>Une fois accepté, le lien devient automatiquement invalide.</span></div>
+    </section>
+  </div>;
 }
 
 function MatchRow({ match }: { match: Match }) {

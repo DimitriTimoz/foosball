@@ -22,9 +22,17 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string | string[] }>;
+}) {
   const user = await getChatGPTUser();
   const isLocalPreview = process.env.NODE_ENV !== "production";
+  const params = await searchParams;
+  const rawInvite = Array.isArray(params.invite) ? params.invite[0] : params.invite;
+  const invite = rawInvite && /^[A-Za-z0-9_-]{20,80}$/.test(rawInvite) ? rawInvite : null;
+  const returnTo = invite ? `/?invite=${encodeURIComponent(invite)}` : "/";
 
   if (!user && !isLocalPreview) {
     return (
@@ -37,7 +45,7 @@ export default async function Home() {
           <p className="eyebrow">BABYFOOT · BUREAU · ELO</p>
           <h1>Chaque pause mérite<br />son classement.</h1>
           <p className="signin-copy">Connectez-vous pour enregistrer les matchs, suivre votre Elo et composer des équipes équilibrées.</p>
-          <a className="primary-button signin-button" href={chatGPTSignInPath("/")}>Se connecter en toute sécurité <span>→</span></a>
+          <a className="primary-button signin-button" href={chatGPTSignInPath(returnTo)}>{invite ? "Accepter l’invitation" : "Se connecter en toute sécurité"} <span>→</span></a>
           <p className="signin-note">Votre connexion et votre mot de passe sont protégés par la plateforme.</p>
         </section>
         <aside className="signin-aside" aria-hidden="true">

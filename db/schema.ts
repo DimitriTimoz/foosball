@@ -12,6 +12,20 @@ export const players = sqliteTable("players", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const invitations = sqliteTable(
+  "invitations",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    usedBy: text("used_by"),
+    usedAt: integer("used_at"),
+  },
+  (table) => [index("invitations_expires_at_idx").on(table.expiresAt)],
+);
+
 export const matches = sqliteTable(
   "matches",
   {

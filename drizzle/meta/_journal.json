@@ -15,6 +15,13 @@
       "when": 1785860135735,
       "tag": "0001_melted_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785860948853,
+      "tag": "0002_woozy_klaw",
+      "breakpoints": true
     }
   ]
 }

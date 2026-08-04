@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getPlayerByEmail, initializeDatabase } from "@/db/foosball";
 
 export async function getSession() {
   const user = await getChatGPTUser();
@@ -12,4 +13,12 @@ export async function getSession() {
     };
   }
   return null;
+}
+
+export async function getMemberSession() {
+  const user = await getSession();
+  if (!user) return null;
+  await initializeDatabase();
+  const player = await getPlayerByEmail(user.email);
+  return player ? { user, player } : null;
 }

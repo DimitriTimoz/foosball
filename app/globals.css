@@ -29,6 +29,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .desktop-nav button { border: 0; background: none; padding: 10px 15px; border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 650; cursor: pointer; }
 .desktop-nav button.active { background: var(--white); color: var(--ink); box-shadow: 0 1px 0 rgba(0,0,0,.05); }
 .top-actions { display: flex; align-items: center; gap: 9px; justify-self: end; }
+.invite-button { min-height: 38px; padding: 0 11px; border: 0; background: transparent; color: var(--blue); font-size: 12px; font-weight: 760; cursor: pointer; border-radius: 9px; }
+.invite-button span { display: inline-block; margin-right: 4px; }
+.invite-button:hover { background: var(--blue-soft); }
 .icon-button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; font-size: 22px; line-height: 1; cursor: pointer; }
 .avatar, .player-avatar { display: grid; place-items: center; border-radius: 50%; flex: 0 0 auto; font-weight: 800; letter-spacing: -.3px; }
 .avatar { width: 38px; height: 38px; background: var(--ink); color: white; font-size: 12px; }
@@ -163,6 +166,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(15, 16, 18, .68); display: grid; place-items: center; padding: 18px; backdrop-filter: blur(5px); overflow: auto; }
 .modal { width: min(760px, 100%); max-height: calc(100vh - 36px); overflow: auto; background: var(--paper); border-radius: 20px; box-shadow: 0 24px 80px rgba(0,0,0,.3); padding: 28px; }
 .player-modal { width: min(500px, 100%); }
+.invite-modal { width: min(500px, 100%); }
 .modal-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; }
 .modal-header .eyebrow { margin-bottom: 4px; }
 .modal-header h2 { margin: 0; font-size: 29px; letter-spacing: -1.5px; }
@@ -203,6 +207,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .position-options b { font-size: 11px; margin: 6px 0 2px; }
 .position-options small { font-size: 8px; color: var(--muted); }
 .position-options input:checked + span { border-color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
+.invite-illustration { height: 118px; border-radius: 14px; display: flex; justify-content: center; align-items: center; gap: 25px; background: var(--ink); margin-bottom: 20px; overflow: hidden; }
+.invite-illustration span { font-size: 76px; line-height: 1; }
+.invite-illustration span:first-child { color: var(--red); }
+.invite-illustration span:last-child { color: var(--blue); }
+.invite-illustration i { color: white; font-style: normal; font-size: 25px; }
+.invite-copy { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0 0 20px; }
+.invite-modal .field { margin-bottom: 10px; }
+.text-button { display: block; border: 0; background: none; color: var(--blue); font-size: 11px; font-weight: 750; margin: 13px auto 0; cursor: pointer; }
+.invite-safety { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 10px; }
+.invite-safety b { color: var(--green); background: var(--ink); border-radius: 20px; padding: 5px 8px; font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.invite-safety span { color: var(--muted); line-height: 1.45; }
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 80; background: var(--ink); color: white; border: 1px solid #393b40; box-shadow: 0 12px 40px rgba(0,0,0,.28); border-radius: 11px; padding: 12px 18px; font-size: 12px; font-weight: 650; display: flex; align-items: center; gap: 9px; }
 .toast span { color: var(--green); }
 .empty-state { text-align: center; padding: 45px 20px; color: var(--muted); }
@@ -239,6 +254,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .blue-player { left: 23%; top: 20%; color: #0a3180; }
 .red-player { right: 20%; bottom: 18%; color: var(--red); }
 .signin-aside p { position: absolute; bottom: 5%; z-index: 4; font: 700 10px var(--font-geist-mono), monospace; letter-spacing: 2px; }
+.invite-gate { min-height: 100vh; display: grid; grid-template-columns: 1.05fr .95fr; }
+.invite-gate-card { padding: clamp(35px, 7vw, 100px); display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.invite-gate-card .brand { margin-bottom: 8vh; }
+.gate-lock { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; background: var(--red); color: white; font-size: 26px; margin-bottom: 22px; }
+.invite-gate-card h1 { font-size: clamp(44px, 6vw, 72px); line-height: .94; letter-spacing: -4.5px; margin: 0 0 22px; }
+.invite-gate-card > p:not(.eyebrow) { max-width: 480px; color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+.invite-gate-aside { position: relative; overflow: hidden; background: var(--ink); color: white; display: flex; align-items: center; justify-content: center; gap: 20px; font: 900 clamp(60px, 9vw, 130px) var(--font-geist-mono), monospace; letter-spacing: -8px; }
+.invite-gate-aside span:first-child { color: var(--red); }
+.invite-gate-aside span:nth-of-type(2) { color: var(--blue); }
+.invite-gate-aside i { color: #74767b; font-style: normal; font-size: .45em; }
+.invite-gate-aside::before, .invite-gate-aside::after { content: ""; position: absolute; width: 70%; height: 2px; background: #42444a; left: 15%; }
+.invite-gate-aside::before { top: 32%; }
+.invite-gate-aside::after { bottom: 32%; }
+.invite-gate-aside p { position: absolute; bottom: 7%; color: #919399; font: 700 9px var(--font-geist-mono), monospace; letter-spacing: 2px; }
 .mobile-nav { display: none; }
 
 @media (max-width: 900px) {
@@ -259,10 +288,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .table-head span:nth-child(3), .leader-row > .position-pill { display: none; }
   .signin-shell { grid-template-columns: 1fr; }
   .signin-aside { display: none; }
+  .invite-gate { grid-template-columns: 1fr; }
+  .invite-gate-aside { display: none; }
 }
 
 @media (max-width: 600px) {
   .top-actions .icon-button, .top-actions .avatar { display: none; }
+  .invite-button { font-size: 0; width: 38px; padding: 0; }
+  .invite-button span { font-size: 18px; margin: 0; }
   .primary-button.compact span { display: none; }
   .hero-grid { grid-template-columns: 1fr; }
   .welcome-card, .stat-card, .rank-card { min-height: 245px; }
@@ -296,6 +329,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .signin-card { padding: 35px 24px; }
   .brand-large { margin-bottom: 15vh; }
   .signin-card h1 { font-size: 46px; letter-spacing: -3px; }
+  .invite-gate-card { padding: 35px 24px; }
+  .invite-gate-card .brand { margin-bottom: 15vh; }
+  .invite-gate-card h1 { font-size: 46px; letter-spacing: -3px; }
   .toast { bottom: 82px; max-width: calc(100% - 28px); width: max-content; }
 }
 

@@ -34,8 +34,18 @@ const schemaStatements = [
     position TEXT NOT NULL CHECK(position IN ('attaquant', 'defenseur')),
     PRIMARY KEY (match_id, player_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS invitations (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_by TEXT,
+    used_at INTEGER
+  )`,
   "CREATE INDEX IF NOT EXISTS matches_created_at_idx ON matches (created_at DESC)",
   "CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id)",
+  "CREATE INDEX IF NOT EXISTS invitations_expires_at_idx ON invitations (expires_at)",
 ];
 
 function d1() {
@@ -64,6 +74,74 @@ export async function ensurePlayer(email: string, name: string) {
     .bind(id, email, name, Date.now())
     .run();
   return db.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
+}
+
+export async function getPlayerByEmail(email: string) {
+  return d1().prepare("SELECT * FROM players WHERE email = ? LIMIT 1").bind(email).first();
+}
+
+export async function ensureInitialMember(email: string, name: string) {
+  const db = d1();
+  const existing = await getPlayerByEmail(email);
+  if (existing) return existing;
+  const count = await db
+    .prepare("SELECT COUNT(*) AS count FROM players WHERE email IS NOT NULL")
+    .first<{ count: number }>();
+  if ((count?.count ?? 0) > 0) return null;
+  return ensurePlayer(email, name);
+}
+
+export async function createInvitation(createdBy: string) {
+  const tokenBytes = new Uint8Array(24);
+  crypto.getRandomValues(tokenBytes);
+  const token = bytesToBase64Url(tokenBytes);
+  const tokenHash = await hashToken(token);
+  const now = Date.now();
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+  await d1()
+    .prepare(
+      "INSERT INTO invitations (id, token_hash, created_by, created_at, expires_at, used_by, used_at) VALUES (?, ?, ?, ?, ?, NULL, NULL)",
+    )
+    .bind(crypto.randomUUID(), tokenHash, createdBy, now, expiresAt)
+    .run();
+  return { token, expiresAt };
+}
+
+export async function redeemInvitation(token: string, email: string, name: string) {
+  const existing = await getPlayerByEmail(email);
+  if (existing) return existing;
+  if (token.length < 20 || token.length > 80) throw new Error("Ce lien d’invitation est invalide.");
+  const db = d1();
+  const tokenHash = await hashToken(token);
+  const invitation = await db
+    .prepare(
+      "SELECT id FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? LIMIT 1",
+    )
+    .bind(tokenHash, Date.now())
+    .first<{ id: string }>();
+  if (!invitation) throw new Error("Ce lien d’invitation est expiré ou a déjà été utilisé.");
+
+  const claimed = await db
+    .prepare(
+      "UPDATE invitations SET used_by = ?, used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?",
+    )
+    .bind(email, Date.now(), invitation.id, Date.now())
+    .run();
+  if ((claimed.meta.changes ?? 0) !== 1) {
+    throw new Error("Ce lien d’invitation vient d’être utilisé.");
+  }
+  return ensurePlayer(email, name);
+}
+
+async function hashToken(token: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return bytesToBase64Url(new Uint8Array(digest));
+}
+
+function bytesToBase64Url(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 export async function addPlayer(name: string, preferredPosition: string) {

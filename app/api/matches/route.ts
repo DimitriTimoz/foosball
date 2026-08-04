@@ -1,9 +1,9 @@
-import { addMatch, initializeDatabase, type MatchMember } from "@/db/foosball";
-import { getSession } from "../_session";
+import { addMatch, type MatchMember } from "@/db/foosball";
+import { getMemberSession } from "../_session";
 
 export async function POST(request: Request) {
-  const user = await getSession();
-  if (!user) return Response.json({ error: "Connexion requise." }, { status: 401 });
+  const member = await getMemberSession();
+  if (!member) return Response.json({ error: "Invitation requise." }, { status: 403 });
   try {
     const body = (await request.json()) as {
       red: MatchMember[];
@@ -11,8 +11,7 @@ export async function POST(request: Request) {
       redScore: number;
       blueScore: number;
     };
-    await initializeDatabase();
-    const match = await addMatch({ ...body, createdBy: user.email });
+    const match = await addMatch({ ...body, createdBy: member.user.email });
     return Response.json({ match }, { status: 201 });
   } catch (error) {
     return Response.json(
