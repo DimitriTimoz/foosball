@@ -117,6 +117,7 @@ export function BuroBallApp() {
 
   const currentPlayer = data?.players.find((player) => player.email === data.user.email);
   const firstName = (data?.user.displayName ?? "").split(" ")[0];
+  const registeredAccounts = data?.players.filter((player) => player.email).length ?? 0;
 
   async function submitMatch(event: React.FormEvent) {
     event.preventDefault();
@@ -303,6 +304,12 @@ export function BuroBallApp() {
                 <button onClick={() => setView("classement")}>Voir le classement →</button>
               </div>
             </section>
+
+            {registeredAccounts === 1 && <section className="first-invite-banner">
+              <div className="first-invite-number">01</div>
+              <div><p className="eyebrow">PREMIÈRE INSCRIPTION</p><h2>Invitez votre premier collègue.</h2><p>Générez son lien personnel d’inscription. Il pourra créer son compte et rejoindre directement votre ligue.</p></div>
+              <button className="primary-button" disabled={busy} onClick={() => { setInviteOpen(true); if (!inviteLink) void createInvite(); }}>{busy ? "Génération…" : "Générer le premier lien →"}</button>
+            </section>}
 
             <section className="content-grid">
               <div className="panel recent-panel">
@@ -670,14 +677,14 @@ function InvitationRequired({ error }: { error: string }) {
 function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; busy: boolean; onCreate: () => void; onCopy: () => void; onClose: () => void }) {
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="modal invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
-      <div className="modal-header"><div><p className="eyebrow">LIGUE PRIVÉE</p><h2 id="invite-title">Inviter un collègue</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
+      <div className="modal-header"><div><p className="eyebrow">LIGUE PRIVÉE</p><h2 id="invite-title">Lien d’inscription</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
       <div className="invite-illustration"><span>●</span><i>→</i><span>●</span></div>
-      <p className="invite-copy">Créez un lien personnel. Il est valable pendant 7 jours et ne peut être utilisé qu’une seule fois.</p>
+      <p className="invite-copy">Générez un lien personnel pour créer un compte dans cette ligue. Il est valable pendant 7 jours et utilisable une seule fois.</p>
       {link ? <>
         <label className="field"><span>Lien d’invitation</span><input readOnly value={link} onFocus={(event) => event.currentTarget.select()} /></label>
         <button className="primary-button full" onClick={onCopy}>Copier le lien</button>
         <button className="text-button" onClick={onCreate} disabled={busy}>Créer un autre lien</button>
-      </> : <button className="primary-button full" onClick={onCreate} disabled={busy}>{busy ? "Création…" : "Créer un lien d’invitation →"}</button>}
+      </> : <button className="primary-button full" onClick={onCreate} disabled={busy}>{busy ? "Génération…" : "Générer le lien d’inscription →"}</button>}
       <div className="invite-safety"><b>Usage unique</b><span>Une fois accepté, le lien devient automatiquement invalide.</span></div>
     </section>
   </div>;

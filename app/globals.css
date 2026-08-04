@@ -76,6 +76,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .rank-card button { position: absolute; bottom: 27px; left: 28px; right: 28px; border: 0; border-top: 1px solid rgba(255,255,255,.26); padding: 17px 0 0; background: none; color: white; text-align: left; font-size: 12px; font-weight: 700; cursor: pointer; }
 
 .content-grid { display: grid; grid-template-columns: 1.5fr .9fr; gap: 16px; margin-top: 16px; }
+.first-invite-banner { display: grid; grid-template-columns: 64px 1fr auto; gap: 20px; align-items: center; margin-top: 16px; padding: 22px 24px; border-radius: 17px; background: var(--blue); color: white; }
+.first-invite-number { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 15px; background: rgba(255,255,255,.12); font: 850 17px var(--font-geist-mono), monospace; }
+.first-invite-banner .eyebrow { margin-bottom: 4px; color: #a9c1ff; }
+.first-invite-banner h2 { margin: 0; font-size: 19px; letter-spacing: -.8px; }
+.first-invite-banner p:not(.eyebrow) { margin: 5px 0 0; color: #d4dfff; font-size: 11px; line-height: 1.45; }
+.first-invite-banner .primary-button { background: white; color: var(--blue); border-color: white; box-shadow: 0 3px 0 #0b3d9d; white-space: nowrap; }
 .panel { background: var(--white); border: 1px solid var(--line); border-radius: 18px; }
 .recent-panel, .podium-panel { padding: 28px; min-height: 360px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 19px; }
@@ -507,6 +513,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .hero-grid { grid-template-columns: 1fr 1fr; }
   .welcome-card { grid-column: 1 / -1; }
   .content-grid { grid-template-columns: 1fr; }
+  .first-invite-banner { grid-template-columns: 56px 1fr; }
+  .first-invite-banner .primary-button { grid-column: 1 / -1; width: 100%; }
   .builder-layout { grid-template-columns: 1fr; }
   .draw-area { min-height: 440px; }
   .history-toolbar { align-items: stretch; flex-direction: column; }
@@ -545,6 +553,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .stat-card > strong { margin-top: 24px; }
   .rank-card strong { margin-top: 30px; }
   .recent-panel, .podium-panel { padding: 20px; }
+  .first-invite-banner { grid-template-columns: 1fr; padding: 21px; }
+  .first-invite-number { display: none; }
   .match-row { grid-template-columns: 32px minmax(0,1fr) auto 32px; gap: 8px; }
   .elo-change { display: none; }
   .match-teams { grid-template-columns: minmax(0,auto) 18px minmax(0,auto); }
