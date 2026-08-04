@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   averageTeamRating,
+  assignPositions,
   balanceGroup,
   calculateEloDelta,
   matchFormat,
@@ -172,14 +173,20 @@ export function OfficeFoosApp() {
 
   function toggleMember(side: "red" | "blue", player: Player) {
     const other = side === "red" ? "blue" : "red";
-    if (draft[other].some((member) => member.id === player.id)) return setToast("This player is already on the other team.");
     setDraft((current) => {
       const selected = current[side].some((member) => member.id === player.id);
-      if (!selected && current[side].length >= 2) { setToast("Each side can have at most two players."); return current; }
-      const next = selected
-        ? current[side].filter((member) => member.id !== player.id)
-        : [...current[side], { id: player.id, position: player.defense_elo > player.attack_elo ? "defenseur" as const : "attaquant" as const }];
-      return { ...current, [side]: next };
+      const targetPlayers = selected
+        ? current[side].filter((member) => member.id !== player.id).map((member) => data!.players.find((item) => item.id === member.id)!)
+        : [...current[side].map((member) => data!.players.find((item) => item.id === member.id)!), player];
+      if (!selected && targetPlayers.length > 2) { setToast("Each side can have at most two players."); return current; }
+      const otherPlayers = current[other]
+        .filter((member) => member.id !== player.id)
+        .map((member) => data!.players.find((item) => item.id === member.id)!);
+      return {
+        ...current,
+        [side]: targetPlayers.length ? assignPositions(targetPlayers) : [],
+        [other]: otherPlayers.length ? assignPositions(otherPlayers) : [],
+      };
     });
   }
 
@@ -676,21 +683,56 @@ function MatchModal({ players, draft, setDraft, toggleMember, onClose, onSubmit,
   const visiblePlayers = players.filter((player) => player.name.toLocaleLowerCase("en").includes(search.trim().toLocaleLowerCase("en")));
   const preview = eloPreview(players, draft);
   const format = draft.red.length && draft.blue.length ? `${draft.red.length}v${draft.blue.length}` : "Incomplete";
+  const selectedSide = (playerId: string) => draft.red.some((member) => member.id === playerId) ? "red" : draft.blue.some((member) => member.id === playerId) ? "blue" : null;
+  const setPosition = (side: "red" | "blue", playerId: string, position: DraftMember["position"]) => setDraft((current) => ({
+    ...current,
+    [side]: current[side].map((member) => member.id === playerId
+      ? { ...member, position }
+      : current[side].length === 2 ? { ...member, position: position === "attaquant" ? "defenseur" : "attaquant" } : member),
+  }));
+  const setWinner = (winner: "red" | "blue") => setDraft((current) => {
+    const loser = winner === "red" ? "blue" : "red";
+    return { ...current, [`${winner}Score`]: 10, [`${loser}Score`]: current[`${loser}Score`] >= 10 ? 7 : current[`${loser}Score`] };
+  });
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <form className="modal match-modal" onSubmit={onSubmit}>
       <div className="modal-header"><div><p className="eyebrow">NEW MATCH · {format}</p><h2>Who won?</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
+      <div className="winner-shortcuts" aria-label="Choose the winning side">
+        <button type="button" className={draft.redScore > draft.blueScore ? "active" : ""} onClick={() => setWinner("red")}><span>●</span> Red won</button>
+        <button type="button" className={draft.blueScore > draft.redScore ? "active" : ""} onClick={() => setWinner("blue")}><span>●</span> Blue won</button>
+      </div>
       <div className="score-entry">
         <ScoreControl side="red" value={draft.redScore} onChange={(value) => setDraft((d) => ({ ...d, redScore: value }))} />
         <span className="score-separator">—</span>
         <ScoreControl side="blue" value={draft.blueScore} onChange={(value) => setDraft((d) => ({ ...d, blueScore: value }))} />
       </div>
-      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap sides</button></div>
-      <div className="team-pickers">
-        {(["red", "blue"] as const).map((side) => <div key={side} className={`team-picker ${side}`}>
-          <div className="picker-title"><strong>{side === "red" ? "Red" : "Blue"} team</strong><span>{draft[side].length}/2</span></div>
-          <div className="picker-players">{visiblePlayers.map((player) => <button type="button" key={player.id} className={draft[side].some((m) => m.id === player.id) ? "picked" : ""} onClick={() => toggleMember(side, player)}><span>{initials(player.name)}</span>{player.name}<i>{draft[side].some((m) => m.id === player.id) ? "✓" : "+"}</i></button>)}</div>
-          {draft[side].map((member) => <label className="position-select" key={member.id}><span>{players.find((p) => p.id === member.id)?.name}</span><select value={member.position} onChange={(e) => setDraft((d) => ({ ...d, [side]: d[side].map((m) => m.id === member.id ? { ...m, position: e.target.value as DraftMember["position"] } : m) }))}><option value="attaquant">Attacker</option><option value="defenseur">Defender</option></select></label>)}
-        </div>)}
+      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap teams</button></div>
+      <div className="quick-roster">
+        <div className="quick-roster-head"><strong>Tap a side to add a player</strong><span>Positions are optimized automatically</span></div>
+        <div className="quick-roster-list">{visiblePlayers.map((player) => {
+          const side = selectedSide(player.id);
+          return <div className={`quick-player ${side ?? ""}`} key={player.id}>
+            <div className="player-avatar">{initials(player.name)}</div>
+            <div><strong>{player.name}</strong><small>{playerProfile(player)} · A {player.attack_elo} · D {player.defense_elo}</small></div>
+            <button type="button" className={side === "red" ? "active" : ""} onClick={() => toggleMember("red", player)} aria-label={`${side === "red" ? "Remove" : "Add"} ${player.name} ${side === "red" ? "from" : "to"} red team`}>R</button>
+            <button type="button" className={side === "blue" ? "active" : ""} onClick={() => toggleMember("blue", player)} aria-label={`${side === "blue" ? "Remove" : "Add"} ${player.name} ${side === "blue" ? "from" : "to"} blue team`}>B</button>
+          </div>;
+        })}</div>
+      </div>
+      <div className="team-lineups">
+        {(["red", "blue"] as const).map((side) => <section key={side} className={`team-lineup ${side}`}>
+          <div className="lineup-title"><strong>{side === "red" ? "Red" : "Blue"} positions</strong><span>{draft[side].length ? `${draft[side].length} player${draft[side].length > 1 ? "s" : ""}` : "Empty"}</span></div>
+          {draft[side].length ? <div className="lineup-players">{draft[side].map((member) => {
+            const player = players.find((item) => item.id === member.id)!;
+            return <div className="lineup-player" key={member.id}>
+              <div><strong>{player.name}</strong><small>{member.position === "attaquant" ? player.attack_elo : player.defense_elo} position Elo</small></div>
+              <div className="position-toggle" aria-label={`${player.name} position`}>
+                <button type="button" className={member.position === "defenseur" ? "active" : ""} onClick={() => setPosition(side, member.id, "defenseur")} title="Defender">D</button>
+                <button type="button" className={member.position === "attaquant" ? "active" : ""} onClick={() => setPosition(side, member.id, "attaquant")} title="Attacker">A</button>
+              </div>
+            </div>;
+          })}</div> : <p className="lineup-empty">Choose a player above</p>}
+        </section>)}
       </div>
       <div className="modal-footer"><p>{preview ? <><b>Estimated impact: ±{preview.delta} Elo</b><span>{preview.message}</span></> : <>Select both teams to preview the Elo impact.</>}</p><button className="primary-button" disabled={busy || !draft.red.length || !draft.blue.length || draft.redScore === draft.blueScore}>{busy ? "Saving…" : "Confirm match →"}</button></div>
     </form>
