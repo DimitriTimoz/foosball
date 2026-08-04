@@ -58,6 +58,7 @@ const schemaStatements = [
     tournament_id TEXT NOT NULL,
     player_id TEXT NOT NULL,
     joined_round INTEGER NOT NULL DEFAULT 1,
+    left_round INTEGER,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (tournament_id, player_id)
   )`,
@@ -118,6 +119,10 @@ export async function initializeDatabase() {
       FROM match_players mp JOIN matches m ON m.id = mp.match_id
       WHERE mp.player_id = players.id AND mp.position = 'defenseur'
     ), 0)`).run();
+  }
+  const tournamentPlayerColumns = await db.prepare("PRAGMA table_info(tournament_players)").all<{ name: string }>();
+  if (!tournamentPlayerColumns.results.some((column) => column.name === "left_round")) {
+    await db.prepare("ALTER TABLE tournament_players ADD COLUMN left_round INTEGER").run();
   }
 }
 
@@ -352,6 +357,7 @@ type TournamentPlayerRow = {
   attack_elo: number;
   defense_elo: number;
   joined_round: number;
+  left_round: number | null;
 };
 
 type TournamentMatchRow = {
@@ -409,11 +415,11 @@ function balanceTournamentGroup(group: TournamentPlayerRow[]) {
 async function createTournamentRound(db: D1Database, tournamentId: string, roundNumber: number) {
   const result = await db
     .prepare(
-      `SELECT p.id, p.name, p.elo, p.attack_elo, p.defense_elo, tp.joined_round
+      `SELECT p.id, p.name, p.elo, p.attack_elo, p.defense_elo, tp.joined_round, tp.left_round
        FROM tournament_players tp JOIN players p ON p.id = tp.player_id
-       WHERE tp.tournament_id = ? AND tp.joined_round <= ?`,
+       WHERE tp.tournament_id = ? AND tp.joined_round <= ? AND (tp.left_round IS NULL OR tp.left_round > ?)`,
     )
-    .bind(tournamentId, roundNumber)
+    .bind(tournamentId, roundNumber, roundNumber)
     .all<TournamentPlayerRow>();
   if (result.results.length < 2) throw new Error("Il faut au moins deux participants pour lancer un tour.");
   const shuffled = [...result.results].sort(() => Math.random() - .5);
@@ -476,7 +482,7 @@ export async function getTournament(id: string) {
   if (!tournament) throw new Error("Ce tournoi est introuvable.");
   const playerResult = await db
     .prepare(
-      `SELECT p.id, p.name, p.elo, p.attack_elo, p.defense_elo, tp.joined_round
+      `SELECT p.id, p.name, p.elo, p.attack_elo, p.defense_elo, tp.joined_round, tp.left_round
        FROM tournament_players tp JOIN players p ON p.id = tp.player_id
        WHERE tp.tournament_id = ? ORDER BY tp.created_at ASC`,
     )
@@ -519,10 +525,31 @@ export async function addTournamentPlayer(tournamentId: string, playerId: string
   if (!tournament || tournament.status !== "active") throw new Error("Ce tournoi n’accepte plus de participants.");
   const player = await db.prepare("SELECT id FROM players WHERE id = ? LIMIT 1").bind(playerId).first();
   if (!player) throw new Error("Ce joueur est introuvable.");
+  const existing = await db.prepare("SELECT joined_round, left_round FROM tournament_players WHERE tournament_id = ? AND player_id = ? LIMIT 1").bind(tournamentId, playerId).first<{ joined_round: number; left_round: number | null }>();
+  if (existing) {
+    if (existing.left_round === null || existing.left_round > tournament.current_round) throw new Error("Ce joueur participe déjà au tournoi.");
+    await db.prepare("UPDATE tournament_players SET joined_round = ?, left_round = NULL, created_at = ? WHERE tournament_id = ? AND player_id = ?").bind(tournament.current_round + 1, Date.now(), tournamentId, playerId).run();
+    return getTournament(tournamentId);
+  }
   try {
     await db.prepare("INSERT INTO tournament_players (tournament_id, player_id, joined_round, created_at) VALUES (?, ?, ?, ?)").bind(tournamentId, playerId, tournament.current_round + 1, Date.now()).run();
   } catch {
     throw new Error("Ce joueur participe déjà au tournoi.");
+  }
+  return getTournament(tournamentId);
+}
+
+export async function removeTournamentPlayer(tournamentId: string, playerId: string) {
+  const db = d1();
+  const tournament = await db.prepare("SELECT status, current_round FROM tournaments WHERE id = ? LIMIT 1").bind(tournamentId).first<{ status: string; current_round: number }>();
+  if (!tournament || tournament.status !== "active") throw new Error("Ce tournoi ne peut plus être modifié.");
+  const participant = await db.prepare("SELECT joined_round, left_round FROM tournament_players WHERE tournament_id = ? AND player_id = ? LIMIT 1").bind(tournamentId, playerId).first<{ joined_round: number; left_round: number | null }>();
+  if (!participant) throw new Error("Ce joueur ne participe pas à ce tournoi.");
+  if (participant.left_round !== null && participant.left_round > tournament.current_round) throw new Error("Le départ de ce joueur est déjà prévu.");
+  if (participant.joined_round > tournament.current_round) {
+    await db.prepare("DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?").bind(tournamentId, playerId).run();
+  } else {
+    await db.prepare("UPDATE tournament_players SET left_round = ? WHERE tournament_id = ? AND player_id = ?").bind(tournament.current_round + 1, tournamentId, playerId).run();
   }
   return getTournament(tournamentId);
 }

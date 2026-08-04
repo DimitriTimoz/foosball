@@ -287,10 +287,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .tournament-hero h2 { margin: 10px 0 4px; font-size: clamp(25px, 4vw, 39px); line-height: 1; letter-spacing: -2.2px; }
 .tournament-hero p { margin: 0; color: #999ca2; font: 9px var(--font-geist-mono), monospace; }
 .tournament-actions label > span { display: block; margin-bottom: 6px; color: #9ca0a6; font-size: 8px; }
+.tournament-actions { display: grid; gap: 10px; }
 .tournament-actions label { display: grid; grid-template-columns: minmax(135px, 1fr) auto; max-width: 310px; }
 .tournament-actions select { height: 39px; border: 1px solid #44474d; border-radius: 9px 0 0 9px; background: #292b30; color: white; padding: 0 9px; font-size: 9px; }
 .tournament-actions button { height: 39px; border: 0; border-radius: 0 9px 9px 0; background: var(--green); color: var(--ink); font-size: 9px; font-weight: 800; padding: 0 11px; cursor: pointer; }
 .tournament-actions button:disabled { opacity: .4; }
+.tournament-actions .leave-player button { background: #f6c1bd; color: #8f2821; }
 .tournament-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
 .tournament-kpis > div { min-height: 83px; border-radius: 13px; padding: 14px 16px; background: var(--white); border: 1px solid var(--line); }
 .tournament-kpis span, .tournament-kpis strong { display: block; }

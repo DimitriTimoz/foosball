@@ -42,14 +42,14 @@ type TournamentSummary = {
   id: string; name: string; status: "active" | "completed"; current_round: number; created_at: number;
   player_count: number; completed_matches: number; match_count: number;
 };
-type TournamentStanding = Player & { joined_round: number; played: number; wins: number; losses: number; points: number; goal_diff: number };
+type TournamentStanding = Player & { joined_round: number; left_round: number | null; played: number; wins: number; losses: number; points: number; goal_diff: number };
 type TournamentGame = {
   id: string; round_number: number; status: "pending" | "recording" | "completed";
   red_score: number | null; blue_score: number | null; red: Member[]; blue: Member[];
 };
 type TournamentDetail = {
   tournament: TournamentSummary;
-  players: Array<Player & { joined_round: number }>;
+  players: Array<Player & { joined_round: number; left_round: number | null }>;
   standings: TournamentStanding[];
   matches: TournamentGame[];
 };
@@ -408,6 +408,7 @@ function TournamentView({ players, onLeagueRefresh, onToast }: { players: Player
   const [name, setName] = useState("Tournoi du bureau");
   const [selectedIds, setSelectedIds] = useState<string[]>(players.map((player) => player.id));
   const [newPlayerId, setNewPlayerId] = useState("");
+  const [leavingPlayerId, setLeavingPlayerId] = useState("");
   const [finishArmed, setFinishArmed] = useState(false);
 
   const loadDetail = useCallback(async (id: string) => {
@@ -455,8 +456,10 @@ function TournamentView({ players, onLeagueRefresh, onToast }: { players: Player
     await post({ action: "create", name, playerIds: selectedIds }, "Tournoi lancé · tout le monde joue au premier tour");
   }
 
-  const availablePlayers = players.filter((player) => !detail?.players.some((participant) => participant.id === player.id));
   const currentRound = detail?.tournament.current_round ?? 1;
+  const availablePlayers = players.filter((player) => !detail?.players.some((participant) => participant.id === player.id && (participant.left_round === null || participant.left_round > currentRound)));
+  const leaveablePlayers = detail?.players.filter((participant) => participant.left_round === null) ?? [];
+  const activePlayerCount = detail?.players.filter((participant) => participant.joined_round <= currentRound + 1 && (participant.left_round === null || participant.left_round > currentRound + 1)).length ?? 0;
   const currentMatches = detail?.matches.filter((match) => match.round_number === currentRound) ?? [];
   const roundComplete = currentMatches.length > 0 && currentMatches.every((match) => match.status === "completed");
   const rounds = detail ? [...new Set(detail.matches.map((match) => match.round_number))].sort((first, second) => second - first) : [];
@@ -486,18 +489,19 @@ function TournamentView({ players, onLeagueRefresh, onToast }: { players: Player
 
       <div className="tournament-main">
         <div className="tournament-hero">
-          <div><span className={`tournament-status ${detail.tournament.status}`}>{detail.tournament.status === "active" ? "● EN COURS" : "✓ TERMINÉ"}</span><h2>{detail.tournament.name}</h2><p>Tour {currentRound} · {detail.players.length} participants</p></div>
+          <div><span className={`tournament-status ${detail.tournament.status}`}>{detail.tournament.status === "active" ? "● EN COURS" : "✓ TERMINÉ"}</span><h2>{detail.tournament.name}</h2><p>Tour {currentRound} · {activePlayerCount} participants actifs</p></div>
           <div className="tournament-actions">
             {detail.tournament.status === "active" && availablePlayers.length > 0 && <label><span>Ajouter au prochain tour</span><select value={newPlayerId} onChange={(event) => setNewPlayerId(event.target.value)}><option value="">Choisir un collègue…</option>{availablePlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><button disabled={!newPlayerId || busy} onClick={() => post({ action: "add_player", tournamentId: detail.tournament.id, playerId: newPlayerId }, "Participant ajouté · il jouera au prochain tour").then(() => setNewPlayerId(""))}>Ajouter ＋</button></label>}
+            {detail.tournament.status === "active" && leaveablePlayers.length > 0 && <label className="leave-player"><span>Retirer après ce tour</span><select value={leavingPlayerId} onChange={(event) => setLeavingPlayerId(event.target.value)}><option value="">Choisir un participant…</option>{leaveablePlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><button disabled={!leavingPlayerId || busy} onClick={() => post({ action: "remove_player", tournamentId: detail.tournament.id, playerId: leavingPlayerId }, "Départ enregistré · le tour actuel reste inchangé").then(() => setLeavingPlayerId(""))}>Retirer −</button></label>}
           </div>
         </div>
 
-        <div className="tournament-kpis"><div><span>TOUR ACTUEL</span><strong>{currentRound}</strong></div><div><span>PARTICIPANTS</span><strong>{detail.players.length}</strong></div><div><span>MATCHS JOUÉS</span><strong>{detail.matches.filter((match) => match.status === "completed").length}</strong></div></div>
+        <div className="tournament-kpis"><div><span>TOUR ACTUEL</span><strong>{currentRound}</strong></div><div><span>ACTIFS AU PROCHAIN</span><strong>{activePlayerCount}</strong></div><div><span>MATCHS JOUÉS</span><strong>{detail.matches.filter((match) => match.status === "completed").length}</strong></div></div>
 
         <div className="panel tournament-standing">
           <div className="tournament-section-head"><div><p className="eyebrow">CLASSEMENT DU TOURNOI</p><h3>La course aux points</h3></div><span>Victoire = 3 points</span></div>
           <div className="tournament-table-head"><span>#</span><span>JOUEUR</span><span>J</span><span>V</span><span>DIFF.</span><span>PTS</span></div>
-          {detail.standings.map((player, index) => <div className="tournament-standing-row" key={player.id}><b>{index + 1}</b><div><span className="player-avatar">{initials(player.name)}</span><span><strong>{player.name}</strong><small>{player.joined_round > currentRound ? `Arrive au tour ${player.joined_round}` : playerProfile(player)}</small></span></div><span>{player.played}</span><span>{player.wins}</span><span className={player.goal_diff > 0 ? "positive" : ""}>{player.goal_diff > 0 ? "+" : ""}{player.goal_diff}</span><strong>{player.points}</strong></div>)}
+          {detail.standings.map((player, index) => <div className="tournament-standing-row" key={player.id}><b>{index + 1}</b><div><span className="player-avatar">{initials(player.name)}</span><span><strong>{player.name}</strong><small>{player.left_round && player.left_round > currentRound ? `Quitte après le tour ${currentRound}` : player.left_round && player.left_round <= currentRound ? "A quitté le tournoi" : player.joined_round > currentRound ? `Arrive au tour ${player.joined_round}` : playerProfile(player)}</small></span></div><span>{player.played}</span><span>{player.wins}</span><span className={player.goal_diff > 0 ? "positive" : ""}>{player.goal_diff > 0 ? "+" : ""}{player.goal_diff}</span><strong>{player.points}</strong></div>)}
         </div>
 
         <div className="tournament-rounds">{rounds.map((round) => <div key={round} className="tournament-round">

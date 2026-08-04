@@ -77,6 +77,7 @@ export const tournamentPlayers = sqliteTable(
     tournamentId: text("tournament_id").notNull(),
     playerId: text("player_id").notNull(),
     joinedRound: integer("joined_round").notNull().default(1),
+    leftRound: integer("left_round"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
