@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   averageTeamRating,
   assignPositions,
@@ -67,6 +67,7 @@ type TournamentDetail = {
 type View = "accueil" | "classement" | "historique" | "stats" | "equipes" | "tournois";
 
 const emptyDraft = { red: [] as DraftMember[], blue: [] as DraftMember[], redScore: 10, blueScore: 7 };
+const draftStorageKey = "office-foos-match-draft";
 
 export function OfficeFoosApp() {
   const [data, setData] = useState<Dashboard | null>(null);
@@ -84,6 +85,7 @@ export function OfficeFoosApp() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const draftHydrated = useRef(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/bootstrap", { cache: "no-store" });
@@ -113,10 +115,33 @@ export function OfficeFoosApp() {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [matchOpen]);
+  useEffect(() => {
+    if (!data || draftHydrated.current) return;
+    const timeout = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(draftStorageKey) ?? "null") as typeof emptyDraft | null;
+        if (!stored || !Array.isArray(stored.red) || !Array.isArray(stored.blue)) { draftHydrated.current = true; return; }
+        const playerIds = new Set(data.players.map((player) => player.id));
+        const validMember = (member: DraftMember) => playerIds.has(member.id) && (member.position === "attaquant" || member.position === "defenseur");
+        if (stored.red.length > 2 || stored.blue.length > 2 || !stored.red.every(validMember) || !stored.blue.every(validMember)) { draftHydrated.current = true; return; }
+        const uniqueIds = new Set([...stored.red, ...stored.blue].map((member) => member.id));
+        if (uniqueIds.size !== stored.red.length + stored.blue.length) { draftHydrated.current = true; return; }
+        draftHydrated.current = true;
+        setDraft({ ...stored, redScore: Math.max(0, Math.min(99, Number(stored.redScore) || 0)), blueScore: Math.max(0, Math.min(99, Number(stored.blueScore) || 0)) });
+        if (stored.red.length || stored.blue.length) setToast("Your unfinished match is ready to resume");
+      } catch { draftHydrated.current = true; window.localStorage.removeItem(draftStorageKey); }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [data]);
+  useEffect(() => {
+    if (!draftHydrated.current) return;
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+  }, [draft]);
 
   const currentPlayer = data?.players.find((player) => player.id === data.user.playerId);
   const firstName = (data?.user.displayName ?? "").split(" ")[0];
   const registeredAccounts = data?.registeredAccounts ?? 0;
+  const hasDraft = draft.red.length > 0 || draft.blue.length > 0;
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -143,6 +168,7 @@ export function OfficeFoosApp() {
       if (!response.ok) throw new Error(payload.error ?? "The match could not be saved.");
       setMatchOpen(false);
       setDraft(emptyDraft);
+      window.localStorage.removeItem(draftStorageKey);
       setToast(`Match saved · ${payload.match?.delta ?? 0} Elo points at stake`);
       await load();
     } catch (error) {
@@ -220,13 +246,19 @@ export function OfficeFoosApp() {
   }
 
   function replayMatch(match: Match) {
-    setDraft({
-      red: match.red.map((member) => ({ id: member.id, position: member.position })),
-      blue: match.blue.map((member) => ({ id: member.id, position: member.position })),
-      redScore: 10,
-      blueScore: 7,
-    });
+    setDraft(draftFromMatch(match));
     setMatchOpen(true);
+  }
+
+  async function shareMatch(match: Match) {
+    const text = `Office Foos · ${names(match.red)} ${match.red_score}–${match.blue_score} ${names(match.blue)} · ±${match.elo_delta} Elo`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Office Foos result", text });
+      else { await navigator.clipboard.writeText(text); setToast("Result copied"); }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setToast("Unable to share this result");
+    }
   }
 
   if (!data) {
@@ -266,7 +298,7 @@ export function OfficeFoosApp() {
                 <p className="eyebrow">DASHBOARD</p>
                 <h1>Hey {firstName},<br /><span>your turn to play.</span></h1>
                 <p>One score, a few seconds, and the leaderboard is up to date.</p>
-                <button className="primary-button hero-button" onClick={() => setMatchOpen(true)}>Record a match <span>→</span></button>
+                <button className="primary-button hero-button" onClick={() => setMatchOpen(true)}>{hasDraft ? "Resume match" : "Record a match"} <span>→</span></button>
                 <div className="ball-decoration" aria-hidden="true">●</div>
               </div>
               <div className="stat-card dark-card">
@@ -284,6 +316,16 @@ export function OfficeFoosApp() {
               </div>
             </section>
 
+            <section className="quick-launch panel" aria-label="Quick actions">
+              <div className="quick-launch-title"><p className="eyebrow">QUICK PLAY</p><h2>Ready in one tap.</h2></div>
+              <div className="quick-launch-actions">
+                <button className="quick-launch-primary" onClick={() => setMatchOpen(true)}><span>{hasDraft ? "↗" : "＋"}</span><div><b>{hasDraft ? "Resume draft" : "New match"}</b><small>{hasDraft ? `${draft.red.length + draft.blue.length} players already selected` : "Enter a score"}</small></div><i>→</i></button>
+                <button disabled={!data.matches[0]} onClick={() => data.matches[0] && replayMatch(data.matches[0])}><span>↻</span><div><b>Rematch</b><small>{data.matches[0] ? `${names(data.matches[0].red)} vs ${names(data.matches[0].blue)}` : "After your first match"}</small></div><i>→</i></button>
+                <button onClick={() => navigate("equipes")}><span>⚖</span><div><b>Balanced teams</b><small>Shuffle 2 to 4 players</small></div><i>→</i></button>
+                <button onClick={() => setInviteOpen(true)}><span>↗</span><div><b>Invite</b><small>Add a coworker</small></div><i>→</i></button>
+              </div>
+            </section>
+
             {registeredAccounts === 1 && <section className="first-invite-banner">
               <div className="first-invite-number">01</div>
               <div><p className="eyebrow">FIRST SIGN-UP</p><h2>Invite your first coworker.</h2><p>Generate their personal sign-up link so they can create an account and join your league.</p></div>
@@ -294,7 +336,7 @@ export function OfficeFoosApp() {
               <div className="panel recent-panel">
                 <div className="section-heading"><div><p className="eyebrow">ACTIVITY</p><h2>Latest matches</h2></div><button onClick={() => setMatchOpen(true)}>Add ＋</button></div>
                 <div className="match-list">
-                  {data.matches.length ? data.matches.slice(0, 6).map((match) => <MatchRow key={match.id} match={match} onReplay={replayMatch} />) : <EmptyState text="No matches yet." action="Record the first one" onClick={() => setMatchOpen(true)} />}
+                  {data.matches.length ? data.matches.slice(0, 6).map((match) => <MatchRow key={match.id} match={match} onReplay={replayMatch} onShare={shareMatch} />) : <EmptyState text="No matches yet." action="Record the first one" onClick={() => setMatchOpen(true)} />}
                 </div>
               </div>
               <div className="panel podium-panel">
@@ -333,7 +375,7 @@ export function OfficeFoosApp() {
           </section>
         )}
 
-        {view === "historique" && <HistoryView matches={data.matches} query={historyQuery} format={historyFormat} setQuery={setHistoryQuery} setFormat={setHistoryFormat} onReplay={replayMatch} onNew={() => setMatchOpen(true)} />}
+        {view === "historique" && <HistoryView matches={data.matches} query={historyQuery} format={historyFormat} setQuery={setHistoryQuery} setFormat={setHistoryFormat} onReplay={replayMatch} onShare={shareMatch} onNew={() => setMatchOpen(true)} />}
 
         {view === "stats" && <StatsView players={data.players} matches={data.matches} stats={data.leagueStats} sideStats={data.sideStats} onPlayer={setSelectedPlayer} />}
 
@@ -388,7 +430,7 @@ export function OfficeFoosApp() {
         </section>
       </div>}
 
-      {matchOpen && <MatchModal players={data.players} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
+      {matchOpen && <MatchModal players={data.players} lastMatch={data.matches[0]} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
       {playerOpen && <PlayerModal onClose={() => setPlayerOpen(false)} onSubmit={submitPlayer} busy={busy} />}
       {inviteOpen && <InviteModal link={inviteLink} busy={busy} onCreate={createInvite} onCopy={copyInvite} onClose={() => setInviteOpen(false)} />}
       {selectedPlayer && <PlayerProfileModal player={selectedPlayer} rank={data.players.findIndex((item) => item.id === selectedPlayer.id) + 1} matches={data.matches} onReplay={replayMatch} onClose={() => setSelectedPlayer(null)} />}
@@ -628,13 +670,14 @@ function StatsView({ players, matches, stats, sideStats, onPlayer }: { players: 
   </section>;
 }
 
-function HistoryView({ matches, query, format, setQuery, setFormat, onReplay, onNew }: {
+function HistoryView({ matches, query, format, setQuery, setFormat, onReplay, onShare, onNew }: {
   matches: Match[];
   query: string;
   format: "tous" | "1v1" | "2v1" | "2v2";
   setQuery: (value: string) => void;
   setFormat: (value: "tous" | "1v1" | "2v1" | "2v2") => void;
   onReplay: (match: Match) => void;
+  onShare: (match: Match) => void;
   onNew: () => void;
 }) {
   const normalized = query.trim().toLocaleLowerCase("en");
@@ -657,7 +700,7 @@ function HistoryView({ matches, query, format, setQuery, setFormat, onReplay, on
       <div className="format-filters">{(["tous", "1v1", "2v1", "2v2"] as const).map((item) => <button key={item} className={format === item ? "active" : ""} onClick={() => setFormat(item)}>{item === "tous" ? "All" : item}</button>)}</div>
     </div>
     <div className="panel history-list">
-      {filtered.length ? filtered.map((match) => <MatchRow key={match.id} match={match} onReplay={onReplay} showFormat />) : <EmptyState text="No match matches this search." action="Clear filters" onClick={() => { setQuery(""); setFormat("tous"); }} />}
+      {filtered.length ? filtered.map((match) => <MatchRow key={match.id} match={match} onReplay={onReplay} onShare={onShare} showFormat />) : <EmptyState text="No match matches this search." action="Clear filters" onClick={() => { setQuery(""); setFormat("tous"); }} />}
     </div>
   </section>;
 }
@@ -700,19 +743,23 @@ function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; 
   </div>;
 }
 
-function MatchRow({ match, onReplay, showFormat = false }: { match: Match; onReplay?: (match: Match) => void; showFormat?: boolean }) {
+function MatchRow({ match, onReplay, onShare, showFormat = false }: { match: Match; onReplay?: (match: Match) => void; onShare?: (match: Match) => void; showFormat?: boolean }) {
   const redWon = match.red_score > match.blue_score;
   return <article className="match-row">
     <div className={`result-badge ${redWon ? "red-win" : "blue-win"}`}>{redWon ? "R" : "B"}</div>
     <div className="match-teams"><strong>{names(match.red)}</strong><span>vs</span><strong>{names(match.blue)}</strong><small>{relativeDate(match.created_at)}{showFormat ? ` · ${formatOf(match)}` : ""}</small></div>
     <div className="match-score"><span className="red-text">{match.red_score}</span><i>—</i><span className="blue-text">{match.blue_score}</span></div>
     <div className="elo-change">±{match.elo_delta}</div>
-    {onReplay && <button className="replay-button" onClick={() => onReplay(match)} title="Replay this match" aria-label="Replay this match">↻</button>}
+    {(onReplay || onShare) && <div className="match-row-actions">
+      {onShare && <button className="share-button" onClick={() => onShare(match)} title="Share this result" aria-label="Share this result">↗</button>}
+      {onReplay && <button className="replay-button" onClick={() => onReplay(match)} title="Replay this match" aria-label="Replay this match">↻</button>}
+    </div>}
   </article>;
 }
 
-function MatchModal({ players, draft, setDraft, toggleMember, onClose, onSubmit, busy }: {
+function MatchModal({ players, lastMatch, draft, setDraft, toggleMember, onClose, onSubmit, busy }: {
   players: Player[];
+  lastMatch?: Match;
   draft: typeof emptyDraft;
   setDraft: React.Dispatch<React.SetStateAction<typeof emptyDraft>>;
   toggleMember: (side: "red" | "blue", player: Player) => void;
@@ -747,7 +794,7 @@ function MatchModal({ players, draft, setDraft, toggleMember, onClose, onSubmit,
         <span className="score-separator">—</span>
         <ScoreControl side="blue" value={draft.blueScore} onChange={(value) => setDraft((d) => ({ ...d, blueScore: value }))} />
       </div>
-      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap teams</button></div>
+      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><div className="match-tool-actions">{lastMatch && <button type="button" onClick={() => setDraft(draftFromMatch(lastMatch))}>↻ Last lineup</button>}<button type="button" onClick={() => setDraft(emptyDraft)} disabled={!draft.red.length && !draft.blue.length}>Clear</button><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap</button></div></div>
       <div className="quick-roster">
         <div className="quick-roster-head"><strong>Tap a side to add a player</strong><span>Positions are optimized automatically</span></div>
         <div className="quick-roster-list">{visiblePlayers.map((player) => {
@@ -819,6 +866,14 @@ function formatOf(match: Match) {
 }
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function names(members: Member[]) { return members.map((member) => member.name.split(" ")[0]).join(" & "); }
+function draftFromMatch(match: Match): typeof emptyDraft {
+  return {
+    red: match.red.map((member) => ({ id: member.id, position: member.position })),
+    blue: match.blue.map((member) => ({ id: member.id, position: member.position })),
+    redScore: 10,
+    blueScore: 7,
+  };
+}
 function positionLabel(position: string) { return position === "defenseur" ? "Defender" : position === "attaquant" ? "Attacker" : "All-rounder"; }
 function relativeDate(timestamp: number) {
   const minutes = Math.round((Date.now() - timestamp) / 60_000);

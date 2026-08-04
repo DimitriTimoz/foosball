@@ -83,6 +83,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .first-invite-banner h2 { margin: 0; font-size: 19px; letter-spacing: -.8px; }
 .first-invite-banner p:not(.eyebrow) { margin: 5px 0 0; color: #d4dfff; font-size: 11px; line-height: 1.45; }
 .first-invite-banner .primary-button { background: white; color: var(--blue); border-color: white; box-shadow: 0 3px 0 #0b3d9d; white-space: nowrap; }
+.quick-launch { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; align-items: center; margin-top: 16px; padding: 14px; }
+.quick-launch-title { padding-left: 8px; }
+.quick-launch-title .eyebrow { margin-bottom: 5px; }
+.quick-launch-title h2 { margin: 0; font-size: 19px; letter-spacing: -.8px; }
+.quick-launch-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.quick-launch-actions > button { min-width: 0; min-height: 64px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); text-align: left; cursor: pointer; }
+.quick-launch-actions > button:hover { border-color: #b7b3aa; background: #f8f5ee; }
+.quick-launch-actions > button:disabled { opacity: .45; cursor: not-allowed; }
+.quick-launch-actions > button > span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: #ece8df; color: var(--blue); font-weight: 850; }
+.quick-launch-actions > button > div { min-width: 0; }
+.quick-launch-actions b, .quick-launch-actions small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-launch-actions b { font-size: 10px; }
+.quick-launch-actions small { margin-top: 3px; color: var(--muted); font-size: 7px; }
+.quick-launch-actions i { color: var(--muted); font-size: 14px; font-style: normal; }
+.quick-launch-actions > .quick-launch-primary { border-color: var(--ink); background: var(--ink); color: white; }
+.quick-launch-actions > .quick-launch-primary:hover { background: #26282d; }
+.quick-launch-actions > .quick-launch-primary > span { background: var(--red); color: white; }
+.quick-launch-actions > .quick-launch-primary small, .quick-launch-actions > .quick-launch-primary i { color: #aaadb2; }
 .panel { background: var(--white); border: 1px solid var(--line); border-radius: 18px; }
 .recent-panel, .podium-panel { padding: 28px; min-height: 360px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 19px; }
@@ -103,8 +121,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .red-text { color: var(--red); }
 .blue-text { color: var(--blue); }
 .elo-change { font-size: 10px; font-family: var(--font-geist-mono), monospace; color: var(--muted); text-align: right; }
-.replay-button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--blue); cursor: pointer; font-size: 15px; }
+.match-row-actions { display: flex; gap: 5px; justify-content: flex-end; }
+.replay-button, .share-button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--blue); cursor: pointer; font-size: 15px; }
+.share-button { color: var(--ink); font-size: 13px; }
 .replay-button:hover { background: var(--blue-soft); border-color: #b7c8ef; }
+.share-button:hover { background: #f0ede5; border-color: #beb9ae; }
 .podium-list { margin-bottom: 22px; }
 .podium-row { width: 100%; display: grid; grid-template-columns: 28px 40px 1fr auto; gap: 11px; align-items: center; min-height: 70px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; padding: 0; }
 .podium-row:hover { background: #f8f5ee; }
@@ -421,7 +442,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .match-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
 .match-tools label { flex: 1; height: 36px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 9px; background: white; padding: 0 10px; color: var(--muted); }
 .match-tools input { width: 100%; border: 0; background: transparent; outline: 0; font-size: 10px; }
-.match-tools > button { height: 36px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--blue); font-size: 10px; font-weight: 700; padding: 0 11px; cursor: pointer; }
+.match-tool-actions { display: flex; gap: 6px; }
+.match-tool-actions button { height: 36px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--blue); font-size: 9px; font-weight: 750; padding: 0 10px; cursor: pointer; white-space: nowrap; }
+.match-tool-actions button:disabled { opacity: .4; cursor: not-allowed; }
 .quick-roster { margin-top: 12px; border: 1px solid var(--line); border-radius: 13px; background: white; overflow: hidden; }
 .quick-roster-head { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #f4f1e9; border-bottom: 1px solid var(--line); }
 .quick-roster-head strong { font-size: 10px; }
@@ -595,6 +618,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .content-grid { grid-template-columns: 1fr; }
   .first-invite-banner { grid-template-columns: 56px 1fr; }
   .first-invite-banner .primary-button { grid-column: 1 / -1; width: 100%; }
+  .quick-launch { grid-template-columns: 1fr; }
+  .quick-launch-title { padding: 2px 3px 0; }
   .builder-layout { grid-template-columns: 1fr; }
   .draw-area { min-height: 440px; }
   .history-toolbar { align-items: stretch; flex-direction: column; }
@@ -649,14 +674,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .rank-card button { left: 17px; right: 17px; bottom: 17px; padding-top: 12px; }
   .recent-panel, .podium-panel { padding: 17px 14px; border-radius: 15px; }
   .content-grid { gap: 10px; margin-top: 10px; }
+  .quick-launch { gap: 11px; margin-top: 10px; padding: 12px; border-radius: 15px; }
+  .quick-launch-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .quick-launch-actions > button { min-height: 67px; grid-template-columns: 32px minmax(0, 1fr); }
+  .quick-launch-actions > button > i { display: none; }
   .section-heading { margin-bottom: 12px; }
   .section-heading h2 { font-size: 21px; }
   .first-invite-banner { grid-template-columns: 1fr; margin-top: 10px; padding: 19px; border-radius: 15px; }
   .first-invite-number { display: none; }
-  .match-row { grid-template-columns: 32px minmax(0,1fr) auto 38px; gap: 7px; min-height: 70px; }
+  .match-row { grid-template-columns: 32px minmax(0,1fr) auto 72px; gap: 7px; min-height: 70px; }
   .elo-change { display: none; }
   .match-teams { grid-template-columns: minmax(0,auto) 18px minmax(0,auto); }
-  .replay-button { width: 38px; height: 38px; }
+  .replay-button, .share-button { width: 34px; height: 38px; }
   .page-section { padding-top: 8px; }
   .page-title { display: block; margin-bottom: 18px; }
   .page-title h1 { font-size: clamp(36px, 12vw, 52px); letter-spacing: -2.8px; }
@@ -684,8 +713,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .score-side > div { grid-template-columns: 42px 1fr 42px; }
   .score-side button { width: 42px; height: 42px; font-size: 19px; }
   .winner-shortcuts button { height: 44px; }
-  .match-tools { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: stretch; }
-  .match-tools label, .match-tools > button { height: 44px; }
+  .match-tools { display: grid; grid-template-columns: 1fr; align-items: stretch; }
+  .match-tools label { height: 44px; }
+  .match-tool-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); }
+  .match-tool-actions button { height: 44px; }
   .quick-roster-head span { display: none; }
   .quick-roster-list { grid-template-columns: 1fr; max-height: 208px; }
   .quick-player { grid-template-columns: 34px minmax(0,1fr) 44px 44px; min-height: 58px; }
