@@ -56,3 +56,61 @@ export const matchPlayers = sqliteTable(
     index("match_players_player_idx").on(table.playerId),
   ],
 );
+
+export const tournaments = sqliteTable(
+  "tournaments",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    status: text("status").notNull().default("active"),
+    currentRound: integer("current_round").notNull().default(1),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [index("tournaments_status_idx").on(table.status, table.createdAt)],
+);
+
+export const tournamentPlayers = sqliteTable(
+  "tournament_players",
+  {
+    tournamentId: text("tournament_id").notNull(),
+    playerId: text("player_id").notNull(),
+    joinedRound: integer("joined_round").notNull().default(1),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tournamentId, table.playerId] }),
+    index("tournament_players_player_idx").on(table.playerId),
+  ],
+);
+
+export const tournamentMatches = sqliteTable(
+  "tournament_matches",
+  {
+    id: text("id").primaryKey(),
+    tournamentId: text("tournament_id").notNull(),
+    roundNumber: integer("round_number").notNull(),
+    status: text("status").notNull().default("pending"),
+    redScore: integer("red_score"),
+    blueScore: integer("blue_score"),
+    matchId: text("match_id"),
+    createdAt: integer("created_at").notNull(),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [index("tournament_matches_round_idx").on(table.tournamentId, table.roundNumber)],
+);
+
+export const tournamentMatchPlayers = sqliteTable(
+  "tournament_match_players",
+  {
+    tournamentMatchId: text("tournament_match_id").notNull(),
+    playerId: text("player_id").notNull(),
+    side: text("side").notNull(),
+    position: text("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tournamentMatchId, table.playerId] }),
+    index("tournament_match_players_player_idx").on(table.playerId),
+  ],
+);

@@ -37,6 +37,21 @@ type LeagueStats = {
 type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; user: SessionUser };
 type DraftMember = { id: string; position: "attaquant" | "defenseur" };
 type Draw = { red: DraftMember[]; blue: DraftMember[]; gap: number };
+type TournamentSummary = {
+  id: string; name: string; status: "active" | "completed"; current_round: number; created_at: number;
+  player_count: number; completed_matches: number; match_count: number;
+};
+type TournamentStanding = Player & { joined_round: number; played: number; wins: number; losses: number; points: number; goal_diff: number };
+type TournamentGame = {
+  id: string; round_number: number; status: "pending" | "recording" | "completed";
+  red_score: number | null; blue_score: number | null; red: Member[]; blue: Member[];
+};
+type TournamentDetail = {
+  tournament: TournamentSummary;
+  players: Array<Player & { joined_round: number }>;
+  standings: TournamentStanding[];
+  matches: TournamentGame[];
+};
 
 const emptyDraft = { red: [] as DraftMember[], blue: [] as DraftMember[], redScore: 10, blueScore: 7 };
 
@@ -44,7 +59,7 @@ export function BuroBallApp() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [access, setAccess] = useState<"loading" | "joining" | "required" | "allowed">("loading");
   const [inviteError, setInviteError] = useState("");
-  const [view, setView] = useState<"accueil" | "classement" | "historique" | "stats" | "equipes">("accueil");
+  const [view, setView] = useState<"accueil" | "classement" | "historique" | "stats" | "equipes" | "tournois">("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -244,6 +259,7 @@ export function BuroBallApp() {
     ["classement", "↗", "Classement"],
     ["historique", "◷", "Historique"],
     ["stats", "▥", "Stats"],
+    ["tournois", "◆", "Tournois"],
     ["equipes", "⚖", "Équipes"],
   ] as const;
 
@@ -335,6 +351,8 @@ export function BuroBallApp() {
 
         {view === "stats" && <StatsView players={data.players} matches={data.matches} stats={data.leagueStats} onPlayer={setSelectedPlayer} />}
 
+        {view === "tournois" && <TournamentView players={data.players} onLeagueRefresh={load} onToast={setToast} />}
+
         {view === "equipes" && (
           <section className="page-section team-builder-page">
             <div className="page-title"><div><p className="eyebrow">TIRAGE ÉQUILIBRÉ</p><h1>Qui joue ?</h1><p>Choisissez 2 à 4 collègues. BuroBall utilise l’Elo de chaque poste pour équilibrer.</p></div></div>
@@ -371,6 +389,135 @@ export function BuroBallApp() {
       {toast && <div className="toast" role="status"><span>●</span>{toast}</div>}
     </div>
   );
+}
+
+function TournamentView({ players, onLeagueRefresh, onToast }: { players: Player[]; onLeagueRefresh: () => Promise<void>; onToast: (message: string) => void }) {
+  const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
+  const [detail, setDetail] = useState<TournamentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("Tournoi du bureau");
+  const [selectedIds, setSelectedIds] = useState<string[]>(players.map((player) => player.id));
+  const [newPlayerId, setNewPlayerId] = useState("");
+  const [finishArmed, setFinishArmed] = useState(false);
+
+  const loadDetail = useCallback(async (id: string) => {
+    const response = await fetch(`/api/tournaments?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const payload = await response.json() as { tournament?: TournamentDetail; error?: string };
+    if (!response.ok || !payload.tournament) throw new Error(payload.error ?? "Impossible de charger ce tournoi.");
+    setDetail(payload.tournament);
+  }, []);
+
+  const loadTournaments = useCallback(async () => {
+    const response = await fetch("/api/tournaments", { cache: "no-store" });
+    const payload = await response.json() as { tournaments?: TournamentSummary[]; error?: string };
+    if (!response.ok) throw new Error(payload.error ?? "Impossible de charger les tournois.");
+    const list = payload.tournaments ?? [];
+    setTournaments(list);
+    if (list.length) await loadDetail(list.find((item) => item.status === "active")?.id ?? list[0].id);
+    else setDetail(null);
+  }, [loadDetail]);
+
+  useEffect(() => {
+    loadTournaments().catch((error) => onToast(error instanceof Error ? error.message : "Impossible de charger les tournois.")).finally(() => setLoading(false));
+  }, [loadTournaments, onToast]);
+
+  async function post(body: Record<string, unknown>, success: string, refreshLeague = false) {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/tournaments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const payload = await response.json() as { tournament?: TournamentDetail; error?: string };
+      if (!response.ok || !payload.tournament) throw new Error(payload.error ?? "Impossible de mettre à jour le tournoi.");
+      setDetail(payload.tournament);
+      setCreating(false);
+      setFinishArmed(false);
+      if (refreshLeague) await onLeagueRefresh();
+      const listResponse = await fetch("/api/tournaments", { cache: "no-store" });
+      const listPayload = await listResponse.json() as { tournaments?: TournamentSummary[] };
+      setTournaments(listPayload.tournaments ?? []);
+      onToast(success);
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "Une erreur est survenue.");
+    } finally { setBusy(false); }
+  }
+
+  async function create(event: React.FormEvent) {
+    event.preventDefault();
+    await post({ action: "create", name, playerIds: selectedIds }, "Tournoi lancé · tout le monde joue au premier tour");
+  }
+
+  const availablePlayers = players.filter((player) => !detail?.players.some((participant) => participant.id === player.id));
+  const currentRound = detail?.tournament.current_round ?? 1;
+  const currentMatches = detail?.matches.filter((match) => match.round_number === currentRound) ?? [];
+  const roundComplete = currentMatches.length > 0 && currentMatches.every((match) => match.status === "completed");
+  const rounds = detail ? [...new Set(detail.matches.map((match) => match.round_number))].sort((first, second) => second - first) : [];
+
+  if (loading) return <section className="page-section"><div className="tournament-loading panel">Préparation des tournois…</div></section>;
+
+  return <section className="page-section tournament-page">
+    <div className="page-title"><div><p className="eyebrow">MODE MÊLÉE</p><h1>Tournois</h1><p>Tout le monde joue à chaque tour, dans des équipes équilibrées qui changent.</p></div><button className="primary-button" disabled={!!tournaments.find((item) => item.status === "active")} onClick={() => setCreating(true)}>＋ Nouveau tournoi</button></div>
+
+    {creating && <form className="panel tournament-create" onSubmit={create}>
+      <div className="tournament-create-head"><div><p className="eyebrow">NOUVEAU TOURNOI</p><h2>Qui entre dans l’arène ?</h2><p>Tout le monde est présélectionné. Vous pourrez encore ajouter un collègue plus tard.</p></div><button type="button" onClick={() => setCreating(false)} aria-label="Fermer">×</button></div>
+      <label className="field"><span>Nom du tournoi</span><input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={50} /></label>
+      <div className="tournament-player-grid">{players.map((player) => {
+        const selected = selectedIds.includes(player.id);
+        return <button type="button" key={player.id} className={selected ? "selected" : ""} onClick={() => setSelectedIds((ids) => selected ? ids.filter((id) => id !== player.id) : [...ids, player.id])}><span>{selected ? "✓" : ""}</span><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong><small>{playerProfile(player)} · {player.elo} Elo</small></div></button>;
+      })}</div>
+      <div className="tournament-create-footer"><span>{selectedIds.length} participant{selectedIds.length > 1 ? "s" : ""}</span><button className="primary-button" disabled={busy || selectedIds.length < 2}>{busy ? "Création…" : "Lancer le premier tour →"}</button></div>
+    </form>}
+
+    {!creating && !detail && <div className="tournament-empty panel"><span>◆</span><h2>Lancez le premier tournoi</h2><p>BuroBall organise les tables pour que chaque collègue joue à chaque tour.</p><button className="primary-button" onClick={() => setCreating(true)}>Créer un tournoi →</button></div>}
+
+    {!creating && detail && <div className="tournament-layout">
+      <aside className="panel tournament-sidebar">
+        <div className="tournament-sidebar-title"><strong>Les tournois</strong><span>{tournaments.length}</span></div>
+        {tournaments.map((item) => <button key={item.id} className={detail.tournament.id === item.id ? "active" : ""} onClick={() => loadDetail(item.id).catch((error) => onToast(error.message))}><span className={item.status}>{item.status === "active" ? "EN COURS" : "TERMINÉ"}</span><strong>{item.name}</strong><small>{item.player_count} joueurs · {item.completed_matches}/{item.match_count} matchs</small></button>)}
+      </aside>
+
+      <div className="tournament-main">
+        <div className="tournament-hero">
+          <div><span className={`tournament-status ${detail.tournament.status}`}>{detail.tournament.status === "active" ? "● EN COURS" : "✓ TERMINÉ"}</span><h2>{detail.tournament.name}</h2><p>Tour {currentRound} · {detail.players.length} participants</p></div>
+          <div className="tournament-actions">
+            {detail.tournament.status === "active" && availablePlayers.length > 0 && <label><span>Ajouter au prochain tour</span><select value={newPlayerId} onChange={(event) => setNewPlayerId(event.target.value)}><option value="">Choisir un collègue…</option>{availablePlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><button disabled={!newPlayerId || busy} onClick={() => post({ action: "add_player", tournamentId: detail.tournament.id, playerId: newPlayerId }, "Participant ajouté · il jouera au prochain tour").then(() => setNewPlayerId(""))}>Ajouter ＋</button></label>}
+          </div>
+        </div>
+
+        <div className="tournament-kpis"><div><span>TOUR ACTUEL</span><strong>{currentRound}</strong></div><div><span>PARTICIPANTS</span><strong>{detail.players.length}</strong></div><div><span>MATCHS JOUÉS</span><strong>{detail.matches.filter((match) => match.status === "completed").length}</strong></div></div>
+
+        <div className="panel tournament-standing">
+          <div className="tournament-section-head"><div><p className="eyebrow">CLASSEMENT DU TOURNOI</p><h3>La course aux points</h3></div><span>Victoire = 3 points</span></div>
+          <div className="tournament-table-head"><span>#</span><span>JOUEUR</span><span>J</span><span>V</span><span>DIFF.</span><span>PTS</span></div>
+          {detail.standings.map((player, index) => <div className="tournament-standing-row" key={player.id}><b>{index + 1}</b><div><span className="player-avatar">{initials(player.name)}</span><span><strong>{player.name}</strong><small>{player.joined_round > currentRound ? `Arrive au tour ${player.joined_round}` : playerProfile(player)}</small></span></div><span>{player.played}</span><span>{player.wins}</span><span className={player.goal_diff > 0 ? "positive" : ""}>{player.goal_diff > 0 ? "+" : ""}{player.goal_diff}</span><strong>{player.points}</strong></div>)}
+        </div>
+
+        <div className="tournament-rounds">{rounds.map((round) => <div key={round} className="tournament-round">
+          <div className="tournament-section-head"><div><p className="eyebrow">{round === currentRound ? "TOUR ACTUEL" : "ARCHIVE"}</p><h3>Tour {round}</h3></div><span>{detail.matches.filter((match) => match.round_number === round && match.status === "completed").length}/{detail.matches.filter((match) => match.round_number === round).length} terminés</span></div>
+          <div className="tournament-match-grid">{detail.matches.filter((match) => match.round_number === round).map((match) => <TournamentMatchCard key={match.id} match={match} disabled={busy || detail.tournament.status !== "active" || match.status === "recording"} onRecord={(redScore, blueScore) => post({ action: "record_match", tournamentId: detail.tournament.id, tournamentMatchId: match.id, redScore, blueScore }, "Score enregistré · classement et Elo mis à jour", true)} />)}</div>
+        </div>)}</div>
+
+        {detail.tournament.status === "active" && <div className="tournament-bottom-actions">
+          <button className="secondary-button danger-button" disabled={!roundComplete || busy} onClick={() => finishArmed ? post({ action: "finish", tournamentId: detail.tournament.id }, "Tournoi terminé · bravo au podium") : setFinishArmed(true)}>{finishArmed ? "Confirmer la fin" : "Terminer le tournoi"}</button>
+          <button className="primary-button" disabled={!roundComplete || busy} onClick={() => post({ action: "next_round", tournamentId: detail.tournament.id }, `Tour ${currentRound + 1} lancé · nouvelles équipes`)}>Lancer le tour {currentRound + 1} →</button>
+          {!roundComplete && <p>Enregistrez tous les scores du tour pour continuer.</p>}
+        </div>}
+      </div>
+    </div>}
+  </section>;
+}
+
+function TournamentMatchCard({ match, disabled, onRecord }: { match: TournamentGame; disabled: boolean; onRecord: (redScore: number, blueScore: number) => Promise<void> }) {
+  const [redScore, setRedScore] = useState(match.red_score ?? 10);
+  const [blueScore, setBlueScore] = useState(match.blue_score ?? 7);
+  const completed = match.status === "completed";
+  return <article className={`tournament-match-card panel ${completed ? "completed" : ""}`}>
+    <div className="tournament-match-top"><span>{match.red.length}v{match.blue.length}</span><b>{completed ? "✓ TERMINÉ" : match.status === "recording" ? "ENREGISTREMENT…" : "À JOUER"}</b></div>
+    <div className="tournament-team red"><div><span>ROUGE</span><strong>{names(match.red)}</strong><small>{match.red.map((member) => `${member.name.split(" ")[0]} · ${positionLabel(member.position)}`).join(" · ")}</small></div>{completed && <b>{match.red_score}</b>}</div>
+    <div className="tournament-versus">VS</div>
+    <div className="tournament-team blue"><div><span>BLEU</span><strong>{names(match.blue)}</strong><small>{match.blue.map((member) => `${member.name.split(" ")[0]} · ${positionLabel(member.position)}`).join(" · ")}</small></div>{completed && <b>{match.blue_score}</b>}</div>
+    {!completed && <div className="tournament-score-entry"><label><span>Rouge</span><input type="number" min="0" max="99" value={redScore} onChange={(event) => setRedScore(Number(event.target.value))} /></label><i>—</i><label><span>Bleu</span><input type="number" min="0" max="99" value={blueScore} onChange={(event) => setBlueScore(Number(event.target.value))} /></label><button disabled={disabled || redScore === blueScore} onClick={() => onRecord(redScore, blueScore)}>Valider</button></div>}
+  </article>;
 }
 
 function StatsView({ players, matches, stats, onPlayer }: { players: Player[]; matches: Match[]; stats: LeagueStats; onPlayer: (player: Player) => void }) {
