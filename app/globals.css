@@ -240,8 +240,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .player-side-row > span:nth-child(2).best b { color: var(--red); }
 .player-side-row > span:nth-child(3).best b { color: var(--blue); }
 .side-verdict { justify-self: start; padding: 6px 8px; border-radius: 20px; background: #e5e2da; color: var(--muted); font: 750 8px var(--font-geist-mono), monospace; }
-.side-verdict.rouge { background: var(--red-soft); color: #b72b23; }
-.side-verdict.bleu { background: var(--blue-soft); color: var(--blue); }
+.side-verdict.red { background: var(--red-soft); color: #b72b23; }
+.side-verdict.blue { background: var(--blue-soft); color: var(--blue); }
 
 .tournament-loading { min-height: 260px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .tournament-page > .page-title { align-items: center; }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
-import { BuroBallApp } from "./buroball-app";
+import { OfficeFoosApp } from "./buroball-app";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +11,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
   const origin = host ? `${protocol}://${host}` : "https://buroball.openai.site";
   return {
-    title: "BuroBall — Le classement babyfoot du bureau",
-    description: "Scores, classement Elo et équipes équilibrées pour le babyfoot entre collègues.",
+    title: "Office Foos — The office foosball leaderboard",
+    description: "Scores, Elo rankings, balanced teams, stats, and tournaments for office foosball.",
     openGraph: {
-      title: "BuroBall",
-      description: "Le babyfoot du bureau, enfin classé.",
+      title: "Office Foos",
+      description: "Office foosball, finally ranked.",
       images: [new URL("/og.png", origin).toString()],
     },
     twitter: { card: "summary_large_image", images: [new URL("/og.png", origin).toString()] },
@@ -38,26 +38,26 @@ export default async function Home({
     return (
       <main className="signin-shell">
         <section className="signin-card">
-          <div className="brand brand-large"><span className="brand-ball">●</span> BuroBall</div>
-          <div className="signin-score" aria-label="score 10 à 7">
+          <div className="brand brand-large"><span className="brand-ball">●</span> Office Foos</div>
+          <div className="signin-score" aria-label="score 10 to 7">
             <span className="score-blue">10</span><span className="score-dash">—</span><span className="score-red">7</span>
           </div>
-          <p className="eyebrow">BABYFOOT · BUREAU · ELO</p>
-          <h1>Chaque pause mérite<br />son classement.</h1>
-          <p className="signin-copy">Connectez-vous pour enregistrer les matchs, suivre votre Elo et composer des équipes équilibrées.</p>
-          <a className="primary-button signin-button" href={chatGPTSignInPath(returnTo)}>{invite ? "Accepter l’invitation" : "Se connecter en toute sécurité"} <span>→</span></a>
-          <p className="signin-note">Votre connexion et votre mot de passe sont protégés par la plateforme.</p>
+          <p className="eyebrow">FOOSBALL · OFFICE · ELO</p>
+          <h1>Every break deserves<br />a leaderboard.</h1>
+          <p className="signin-copy">Sign in to record matches, track your Elo, and build balanced teams.</p>
+          <a className="primary-button signin-button" href={chatGPTSignInPath(returnTo)}>{invite ? "Accept invitation" : "Sign in securely"} <span>→</span></a>
+          <p className="signin-note">Your sign-in and password are protected by the platform.</p>
         </section>
         <aside className="signin-aside" aria-hidden="true">
           <div className="table-line table-line-one" />
           <div className="table-line table-line-two" />
           <div className="foos-player blue-player">●</div>
           <div className="foos-player red-player">●</div>
-          <p>PRÊT·E À JOUER ?</p>
+          <p>READY TO PLAY?</p>
         </aside>
       </main>
     );
   }
 
-  return <BuroBallApp />;
+  return <OfficeFoosApp />;
 }

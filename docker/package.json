@@ -1,5 +1,5 @@
 {
-  "name": "buroball-container-runtime",
+  "name": "office-foos-container-runtime",
   "private": true,
   "type": "module",
   "dependencies": {

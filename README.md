@@ -1,19 +1,19 @@
-# BuroBall
+# Office Foos
 
-Application de classement de babyfoot entre collègues : comptes sur invitation,
-matchs 1v1/2v1/2v2, Elo global et par poste, équipes équilibrées, statistiques
-et tournois.
+An office foosball leaderboard with invitation-only accounts, 1v1/2v1/2v2
+matches, global and position-specific Elo ratings, balanced teams, statistics,
+and tournaments.
 
-## Développement
+## Development
 
-Prérequis : Node.js 22.13 ou plus récent.
+Requires Node.js 22.13 or newer.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Les algorithmes et le build complet sont validés avec :
+Run the algorithm tests and a complete production build with:
 
 ```bash
 npm test
@@ -21,39 +21,37 @@ npm test
 
 ## Docker
 
-L'image contient le build de production et démarre BuroBall avec une base D1
-locale persistante dans `/data`.
+The image contains the production build and starts Office Foos with a local D1
+database persisted in `/data`.
 
 ```bash
-docker build -t buroball .
+docker build -t office-foos .
 docker run --rm -p 3000:3000 \
   -e BUROBALL_DEMO_MODE=true \
-  -v buroball-data:/data \
-  buroball
+  -v office-foos-data:/data \
+  office-foos
 ```
 
-L'application est ensuite disponible sur `http://localhost:3000`.
+The app is then available at `http://localhost:3000`.
 
-Le mode démo fournit une identité locale et des données d'exemple. Laissez-le
-désactivé derrière un proxy qui injecte les en-têtes d'identité ChatGPT attendus
-par l'application. Le port peut être modifié avec `-e PORT=8080 -p 8080:8080`.
-Le chemin de persistance interne peut être configuré avec
-`BUROBALL_DATA_DIR`.
+Demo mode provides a local identity and sample data. Keep it disabled behind a
+proxy that injects the ChatGPT identity headers expected by the app. Change the
+port with `-e PORT=8080 -p 8080:8080`. Configure the internal persistence path
+with `BUROBALL_DATA_DIR`.
 
-## Publication continue
+## Continuous delivery
 
-La GitHub Action `.github/workflows/docker-publish.yml` construit l'image pour
-`linux/amd64` et `linux/arm64` :
+The `.github/workflows/docker-publish.yml` GitHub Action builds the image for
+`linux/amd64` and `linux/arm64`:
 
-- une pull request vérifie l'image sans la publier ;
-- un push sur `main` publie `latest`, `main` et `sha-…` ;
-- un tag Git commençant par `v` publie également ce tag de version.
+- pull requests validate the image without publishing it;
+- pushes to `main` publish `latest`, `main`, and `sha-…`;
+- Git tags starting with `v` also publish the matching version tag.
 
-Les images sont publiées dans `ghcr.io/<propriétaire>/<dépôt>` avec le
-`GITHUB_TOKEN` fourni automatiquement par GitHub Actions. Aucun secret
-supplémentaire n'est nécessaire.
+Images are published to `ghcr.io/<owner>/<repository>` with the `GITHUB_TOKEN`
+automatically provided by GitHub Actions. No additional secret is required.
 
-Exemple après la première publication :
+Example after the first publication:
 
 ```bash
 docker pull ghcr.io/dimitritimoz/foosball:latest

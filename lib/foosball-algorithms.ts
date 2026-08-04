@@ -7,7 +7,7 @@ export function positionalElo(player: RatingPlayer, position: Position) {
 }
 
 export function averageTeamRating(players: RatingPlayer[], members: RatedMember[]) {
-  if (!members.length) throw new Error("Une équipe doit contenir au moins un joueur.");
+  if (!members.length) throw new Error("A team must contain at least one player.");
   return Math.round(members.reduce((sum, member) => {
     const player = players.find((item) => item.id === member.id);
     return sum + (player ? positionalElo(player, member.position) : 1000);
@@ -20,7 +20,7 @@ export function calculateEloDelta(redRating: number, blueRating: number, redWon:
 }
 
 export function assignPositions<T extends RatingPlayer>(players: T[]): RatedMember[] {
-  if (players.length < 1 || players.length > 2) throw new Error("Une équipe doit contenir un ou deux joueurs.");
+  if (players.length < 1 || players.length > 2) throw new Error("A team must contain one or two players.");
   if (players.length === 1) {
     const player = players[0];
     return [{ id: player.id, position: player.defense_elo > player.attack_elo ? "defenseur" : "attaquant" }];
@@ -34,7 +34,7 @@ export function assignPositions<T extends RatingPlayer>(players: T[]): RatedMemb
 }
 
 export function balanceGroup<T extends RatingPlayer>(group: T[], random: () => number = Math.random) {
-  if (group.length < 2 || group.length > 4) throw new Error("Un match doit contenir entre deux et quatre joueurs.");
+  if (group.length < 2 || group.length > 4) throw new Error("A match must contain between two and four players.");
   const partitions: Array<[T[], T[]]> = [];
   if (group.length === 2) partitions.push([[group[0]], [group[1]]]);
   if (group.length === 3) group.forEach((solo) => partitions.push([group.filter((player) => player.id !== solo.id), [solo]]));
@@ -56,7 +56,7 @@ export function balanceGroup<T extends RatingPlayer>(group: T[], random: () => n
 }
 
 export function tournamentGroupSizes(playerCount: number) {
-  if (!Number.isInteger(playerCount) || playerCount < 2) throw new Error("Il faut au moins deux participants.");
+  if (!Number.isInteger(playerCount) || playerCount < 2) throw new Error("At least two participants are required.");
   const sizes: number[] = [];
   let remaining = playerCount;
   while (remaining > 0) {
@@ -83,9 +83,9 @@ export function matchFormat(redSize: number, blueSize: number) {
 
 export function playerProfile(player: Pick<RatingPlayer, "attack_elo" | "defense_elo">) {
   const gap = player.attack_elo - player.defense_elo;
-  if (gap >= 80) return "Attaquant";
-  if (gap <= -80) return "Défenseur";
-  return "Polyvalent";
+  if (gap >= 80) return "Attacker";
+  if (gap <= -80) return "Defender";
+  return "All-rounder";
 }
 
 export function winRate(wins: number, games: number) {
@@ -93,9 +93,9 @@ export function winRate(wins: number, games: number) {
 }
 
 export function preferredSide(redGames: number, redWins: number, blueGames: number, blueWins: number) {
-  if (redGames + blueGames === 0) return "À tester";
+  if (redGames + blueGames === 0) return "Untested";
   const redRate = winRate(redWins, redGames);
   const blueRate = winRate(blueWins, blueGames);
-  if (Math.abs(redRate - blueRate) < 10) return "Équilibré";
-  return redRate > blueRate ? "Rouge" : "Bleu";
+  if (Math.abs(redRate - blueRate) < 10) return "Balanced";
+  return redRate > blueRate ? "Red" : "Blue";
 }

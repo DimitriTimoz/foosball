@@ -91,7 +91,7 @@ const schemaStatements = [
 
 function d1() {
   const runtimeEnv = env as unknown as { DB?: D1Database };
-  if (!runtimeEnv.DB) throw new Error("La base de données n’est pas disponible.");
+  if (!runtimeEnv.DB) throw new Error("The database is unavailable.");
   return runtimeEnv.DB;
 }
 
@@ -177,7 +177,7 @@ export async function createInvitation(createdBy: string) {
 export async function redeemInvitation(token: string, email: string, name: string) {
   const existing = await getPlayerByEmail(email);
   if (existing) return existing;
-  if (token.length < 20 || token.length > 80) throw new Error("Ce lien d’invitation est invalide.");
+  if (token.length < 20 || token.length > 80) throw new Error("This invitation link is invalid.");
   const db = d1();
   const tokenHash = await hashToken(token);
   const invitation = await db
@@ -186,7 +186,7 @@ export async function redeemInvitation(token: string, email: string, name: strin
     )
     .bind(tokenHash, Date.now())
     .first<{ id: string }>();
-  if (!invitation) throw new Error("Ce lien d’invitation est expiré ou a déjà été utilisé.");
+  if (!invitation) throw new Error("This invitation link has expired or has already been used.");
 
   const claimed = await db
     .prepare(
@@ -195,7 +195,7 @@ export async function redeemInvitation(token: string, email: string, name: strin
     .bind(email, Date.now(), invitation.id, Date.now())
     .run();
   if ((claimed.meta.changes ?? 0) !== 1) {
-    throw new Error("Ce lien d’invitation vient d’être utilisé.");
+    throw new Error("This invitation link was just used.");
   }
   return ensurePlayer(email, name);
 }
@@ -287,14 +287,14 @@ export async function addMatch(args: {
   const db = d1();
   const playerIds = [...args.red, ...args.blue].map((member) => member.id);
   if (![1, 2].includes(args.red.length) || ![1, 2].includes(args.blue.length)) {
-    throw new Error("Chaque côté doit avoir un ou deux joueurs.");
+    throw new Error("Each side must have one or two players.");
   }
   if (new Set(playerIds).size !== playerIds.length) {
-    throw new Error("Un joueur ne peut apparaître qu’une fois.");
+    throw new Error("A player can only appear once.");
   }
-  if (args.redScore === args.blueScore) throw new Error("Le score final ne peut pas être nul.");
+  if (args.redScore === args.blueScore) throw new Error("The final score cannot be tied.");
   if ([args.redScore, args.blueScore].some((score) => !Number.isInteger(score) || score < 0 || score > 99)) {
-    throw new Error("Le score doit être compris entre 0 et 99.");
+    throw new Error("Scores must be between 0 and 99.");
   }
 
   const placeholders = playerIds.map(() => "?").join(",");
@@ -302,7 +302,7 @@ export async function addMatch(args: {
     .prepare(`SELECT id, elo, attack_elo, defense_elo FROM players WHERE id IN (${placeholders})`)
     .bind(...playerIds)
     .all();
-  if (rows.results.length !== playerIds.length) throw new Error("Un joueur est introuvable.");
+  if (rows.results.length !== playerIds.length) throw new Error("A player could not be found.");
   const ratings = new Map(
     (rows.results as Array<{ id: string; elo: number; attack_elo: number; defense_elo: number }>).map((row) => [row.id, row]),
   );
@@ -380,7 +380,7 @@ async function createTournamentRound(db: D1Database, tournamentId: string, round
     )
     .bind(tournamentId, roundNumber, roundNumber)
     .all<TournamentPlayerRow>();
-  if (result.results.length < 2) throw new Error("Il faut au moins deux participants pour lancer un tour.");
+  if (result.results.length < 2) throw new Error("At least two participants are required to start a round.");
   const groups = splitTournamentGroups(result.results);
   const now = Date.now();
   const statements: D1PreparedStatement[] = [];
@@ -399,14 +399,14 @@ async function createTournamentRound(db: D1Database, tournamentId: string, round
 export async function createTournament(name: string, playerIds: string[], createdBy: string) {
   const cleanName = name.trim().replace(/\s+/g, " ");
   const uniqueIds = [...new Set(playerIds)];
-  if (cleanName.length < 2 || cleanName.length > 50) throw new Error("Le nom du tournoi doit contenir entre 2 et 50 caractères.");
-  if (uniqueIds.length < 2) throw new Error("Sélectionnez au moins deux participants.");
+  if (cleanName.length < 2 || cleanName.length > 50) throw new Error("The tournament name must contain between 2 and 50 characters.");
+  if (uniqueIds.length < 2) throw new Error("Select at least two participants.");
   const db = d1();
   const placeholders = uniqueIds.map(() => "?").join(",");
   const found = await db.prepare(`SELECT id FROM players WHERE id IN (${placeholders})`).bind(...uniqueIds).all<{ id: string }>();
-  if (found.results.length !== uniqueIds.length) throw new Error("Un participant est introuvable.");
+  if (found.results.length !== uniqueIds.length) throw new Error("A participant could not be found.");
   const active = await db.prepare("SELECT id FROM tournaments WHERE status = 'active' LIMIT 1").first();
-  if (active) throw new Error("Terminez le tournoi en cours avant d’en créer un nouveau.");
+  if (active) throw new Error("Finish the current tournament before creating a new one.");
   const id = crypto.randomUUID();
   const now = Date.now();
   await db.batch([
@@ -433,7 +433,7 @@ export async function getTournaments() {
 export async function getTournament(id: string) {
   const db = d1();
   const tournament = await db.prepare("SELECT * FROM tournaments WHERE id = ? LIMIT 1").bind(id).first();
-  if (!tournament) throw new Error("Ce tournoi est introuvable.");
+  if (!tournament) throw new Error("This tournament could not be found.");
   const playerResult = await db
     .prepare(
       `SELECT p.id, p.name, p.elo, p.attack_elo, p.defense_elo, tp.joined_round, tp.left_round
@@ -476,19 +476,19 @@ export async function getTournament(id: string) {
 export async function addTournamentPlayer(tournamentId: string, playerId: string) {
   const db = d1();
   const tournament = await db.prepare("SELECT status, current_round FROM tournaments WHERE id = ? LIMIT 1").bind(tournamentId).first<{ status: string; current_round: number }>();
-  if (!tournament || tournament.status !== "active") throw new Error("Ce tournoi n’accepte plus de participants.");
+  if (!tournament || tournament.status !== "active") throw new Error("This tournament no longer accepts participants.");
   const player = await db.prepare("SELECT id FROM players WHERE id = ? LIMIT 1").bind(playerId).first();
-  if (!player) throw new Error("Ce joueur est introuvable.");
+  if (!player) throw new Error("This player could not be found.");
   const existing = await db.prepare("SELECT joined_round, left_round FROM tournament_players WHERE tournament_id = ? AND player_id = ? LIMIT 1").bind(tournamentId, playerId).first<{ joined_round: number; left_round: number | null }>();
   if (existing) {
-    if (existing.left_round === null || existing.left_round > tournament.current_round) throw new Error("Ce joueur participe déjà au tournoi.");
+    if (existing.left_round === null || existing.left_round > tournament.current_round) throw new Error("This player is already in the tournament.");
     await db.prepare("UPDATE tournament_players SET joined_round = ?, left_round = NULL, created_at = ? WHERE tournament_id = ? AND player_id = ?").bind(tournament.current_round + 1, Date.now(), tournamentId, playerId).run();
     return getTournament(tournamentId);
   }
   try {
     await db.prepare("INSERT INTO tournament_players (tournament_id, player_id, joined_round, created_at) VALUES (?, ?, ?, ?)").bind(tournamentId, playerId, tournament.current_round + 1, Date.now()).run();
   } catch {
-    throw new Error("Ce joueur participe déjà au tournoi.");
+    throw new Error("This player is already in the tournament.");
   }
   return getTournament(tournamentId);
 }
@@ -496,10 +496,10 @@ export async function addTournamentPlayer(tournamentId: string, playerId: string
 export async function removeTournamentPlayer(tournamentId: string, playerId: string) {
   const db = d1();
   const tournament = await db.prepare("SELECT status, current_round FROM tournaments WHERE id = ? LIMIT 1").bind(tournamentId).first<{ status: string; current_round: number }>();
-  if (!tournament || tournament.status !== "active") throw new Error("Ce tournoi ne peut plus être modifié.");
+  if (!tournament || tournament.status !== "active") throw new Error("This tournament can no longer be changed.");
   const participant = await db.prepare("SELECT joined_round, left_round FROM tournament_players WHERE tournament_id = ? AND player_id = ? LIMIT 1").bind(tournamentId, playerId).first<{ joined_round: number; left_round: number | null }>();
-  if (!participant) throw new Error("Ce joueur ne participe pas à ce tournoi.");
-  if (participant.left_round !== null && participant.left_round > tournament.current_round) throw new Error("Le départ de ce joueur est déjà prévu.");
+  if (!participant) throw new Error("This player is not in the tournament.");
+  if (participant.left_round !== null && participant.left_round > tournament.current_round) throw new Error("This player is already scheduled to leave.");
   if (participant.joined_round > tournament.current_round) {
     await db.prepare("DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?").bind(tournamentId, playerId).run();
   } else {
@@ -511,9 +511,9 @@ export async function removeTournamentPlayer(tournamentId: string, playerId: str
 export async function createNextTournamentRound(tournamentId: string) {
   const db = d1();
   const tournament = await db.prepare("SELECT status, current_round FROM tournaments WHERE id = ? LIMIT 1").bind(tournamentId).first<{ status: string; current_round: number }>();
-  if (!tournament || tournament.status !== "active") throw new Error("Ce tournoi est terminé.");
+  if (!tournament || tournament.status !== "active") throw new Error("This tournament is over.");
   const pending = await db.prepare("SELECT COUNT(*) AS count FROM tournament_matches WHERE tournament_id = ? AND round_number = ? AND status != 'completed'").bind(tournamentId, tournament.current_round).first<{ count: number }>();
-  if ((pending?.count ?? 0) > 0) throw new Error("Terminez tous les matchs du tour avant de continuer.");
+  if ((pending?.count ?? 0) > 0) throw new Error("Finish every match in this round before continuing.");
   const nextRound = tournament.current_round + 1;
   await createTournamentRound(db, tournamentId, nextRound);
   await db.prepare("UPDATE tournaments SET current_round = ? WHERE id = ?").bind(nextRound, tournamentId).run();
@@ -522,7 +522,7 @@ export async function createNextTournamentRound(tournamentId: string) {
 
 export async function recordTournamentMatch(tournamentId: string, tournamentMatchId: string, redScore: number, blueScore: number, createdBy: string) {
   if (!Number.isInteger(redScore) || !Number.isInteger(blueScore) || redScore < 0 || blueScore < 0 || redScore > 99 || blueScore > 99 || redScore === blueScore) {
-    throw new Error("Saisissez un score valide, sans égalité.");
+    throw new Error("Enter a valid score without a tie.");
   }
   const db = d1();
   const now = Date.now();
@@ -531,10 +531,10 @@ export async function recordTournamentMatch(tournamentId: string, tournamentMatc
     .prepare("SELECT tm.id FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id WHERE tm.id = ? AND tm.tournament_id = ? AND (tm.status = 'pending' OR (tm.status = 'recording' AND tm.completed_at < ?)) AND t.status = 'active' LIMIT 1")
     .bind(tournamentMatchId, tournamentId, staleBefore)
     .first();
-  if (!row) throw new Error("Ce match a déjà été enregistré ou n’est plus disponible.");
+  if (!row) throw new Error("This match has already been saved or is no longer available.");
   const members = await db.prepare("SELECT player_id AS id, side, position FROM tournament_match_players WHERE tournament_match_id = ?").bind(tournamentMatchId).all<{ id: string; side: Side; position: Position }>();
   const locked = await db.prepare("UPDATE tournament_matches SET status = 'recording', completed_at = ? WHERE id = ? AND (status = 'pending' OR (status = 'recording' AND completed_at < ?))").bind(now, tournamentMatchId, staleBefore).run();
-  if ((locked.meta.changes ?? 0) !== 1) throw new Error("Ce match vient d’être enregistré par un autre collègue.");
+  if ((locked.meta.changes ?? 0) !== 1) throw new Error("Another coworker just saved this match.");
   try {
     const match = await addMatch({
       red: members.results.filter((member) => member.side === "red").map(({ id, position }) => ({ id, position })),
@@ -554,9 +554,9 @@ export async function recordTournamentMatch(tournamentId: string, tournamentMatc
 export async function finishTournament(tournamentId: string) {
   const db = d1();
   const pending = await db.prepare("SELECT COUNT(*) AS count FROM tournament_matches WHERE tournament_id = ? AND status != 'completed'").bind(tournamentId).first<{ count: number }>();
-  if ((pending?.count ?? 0) > 0) throw new Error("Terminez les matchs en cours avant de clôturer le tournoi.");
+  if ((pending?.count ?? 0) > 0) throw new Error("Finish all ongoing matches before ending the tournament.");
   const result = await db.prepare("UPDATE tournaments SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'active'").bind(Date.now(), tournamentId).run();
-  if ((result.meta.changes ?? 0) !== 1) throw new Error("Ce tournoi est déjà terminé.");
+  if ((result.meta.changes ?? 0) !== 1) throw new Error("This tournament is already over.");
   return getTournament(tournamentId);
 }
 
