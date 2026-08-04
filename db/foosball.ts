@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
+import { balanceGroup, calculateEloDelta, splitTournamentGroups, type Position, type RatedMember } from "@/lib/foosball-algorithms";
 
-export type Position = "attaquant" | "defenseur";
 export type Side = "red" | "blue";
-
-export type MatchMember = { id: string; position: Position };
+export type MatchMember = RatedMember;
+export type { Position };
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS players (
@@ -315,9 +315,8 @@ export async function addMatch(args: {
     );
   const redElo = average(args.red);
   const blueElo = average(args.blue);
-  const expectedRed = 1 / (1 + 10 ** ((blueElo - redElo) / 400));
   const redWon = args.redScore > args.blueScore;
-  const delta = Math.max(1, Math.abs(Math.round(32 * ((redWon ? 1 : 0) - expectedRed))));
+  const delta = calculateEloDelta(redElo, blueElo, redWon);
   const signedDelta = redWon ? delta : -delta;
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -372,46 +371,6 @@ type TournamentMatchRow = {
   completed_at: number | null;
 };
 
-function tournamentPositions(players: TournamentPlayerRow[]): MatchMember[] {
-  if (players.length === 1) {
-    const player = players[0];
-    return [{ id: player.id, position: player.defense_elo > player.attack_elo ? "defenseur" : "attaquant" }];
-  }
-  const [first, second] = players;
-  const firstDefends = first.defense_elo + second.attack_elo >= first.attack_elo + second.defense_elo;
-  return [
-    { id: first.id, position: firstDefends ? "defenseur" : "attaquant" },
-    { id: second.id, position: firstDefends ? "attaquant" : "defenseur" },
-  ];
-}
-
-function tournamentRating(players: TournamentPlayerRow[], members: MatchMember[]) {
-  return members.reduce((sum, member) => {
-    const player = players.find((item) => item.id === member.id)!;
-    return sum + (member.position === "attaquant" ? player.attack_elo : player.defense_elo);
-  }, 0) / members.length;
-}
-
-function balanceTournamentGroup(group: TournamentPlayerRow[]) {
-  const partitions: Array<[TournamentPlayerRow[], TournamentPlayerRow[]]> = [];
-  if (group.length === 2) partitions.push([[group[0]], [group[1]]]);
-  if (group.length === 3) {
-    group.forEach((solo) => partitions.push([group.filter((player) => player.id !== solo.id), [solo]]));
-  }
-  if (group.length === 4) {
-    for (let index = 1; index < group.length; index++) {
-      partitions.push([[group[0], group[index]], group.filter((_, itemIndex) => itemIndex !== 0 && itemIndex !== index)]);
-    }
-  }
-  const options = partitions.map(([redPlayers, bluePlayers]) => {
-    const red = tournamentPositions(redPlayers);
-    const blue = tournamentPositions(bluePlayers);
-    return { red, blue, gap: Math.abs(tournamentRating(group, red) - tournamentRating(group, blue)) + Math.random() * 8 };
-  }).sort((first, second) => first.gap - second.gap);
-  const best = options[0];
-  return Math.random() > .5 ? { red: best.blue, blue: best.red } : { red: best.red, blue: best.blue };
-}
-
 async function createTournamentRound(db: D1Database, tournamentId: string, roundNumber: number) {
   const result = await db
     .prepare(
@@ -422,17 +381,12 @@ async function createTournamentRound(db: D1Database, tournamentId: string, round
     .bind(tournamentId, roundNumber, roundNumber)
     .all<TournamentPlayerRow>();
   if (result.results.length < 2) throw new Error("Il faut au moins deux participants pour lancer un tour.");
-  const shuffled = [...result.results].sort(() => Math.random() - .5);
-  const groups: TournamentPlayerRow[][] = [];
-  while (shuffled.length) {
-    const size = shuffled.length === 5 ? 3 : Math.min(4, shuffled.length);
-    groups.push(shuffled.splice(0, size));
-  }
+  const groups = splitTournamentGroups(result.results);
   const now = Date.now();
   const statements: D1PreparedStatement[] = [];
   for (const group of groups) {
     const id = crypto.randomUUID();
-    const teams = balanceTournamentGroup(group);
+    const teams = balanceGroup(group);
     statements.push(
       db.prepare("INSERT INTO tournament_matches (id, tournament_id, round_number, status, created_at) VALUES (?, ?, ?, 'pending', ?)").bind(id, tournamentId, roundNumber, now),
       ...teams.red.map((member) => db.prepare("INSERT INTO tournament_match_players (tournament_match_id, player_id, side, position) VALUES (?, ?, 'red', ?)").bind(id, member.id, member.position)),

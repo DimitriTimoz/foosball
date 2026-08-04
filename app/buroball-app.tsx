@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  averageTeamRating,
+  balanceGroup,
+  calculateEloDelta,
+  matchFormat,
+  playerProfile,
+  positionalElo,
+  preferredSide,
+  winRate,
+} from "@/lib/foosball-algorithms";
 
 type Player = {
   id: string;
@@ -192,44 +202,10 @@ export function BuroBallApp() {
     });
   }
 
-  function assignPositions(ids: string[]): DraftMember[] {
-    const members = ids.map((id) => data!.players.find((player) => player.id === id)!);
-    if (members.length === 1) {
-      return [{ id: members[0].id, position: members[0].defense_elo > members[0].attack_elo ? "defenseur" : "attaquant" }];
-    }
-    const [first, second] = members;
-    const firstDefends = first.defense_elo + second.attack_elo >= first.attack_elo + second.defense_elo;
-    return [
-      { id: first.id, position: firstDefends ? "defenseur" : "attaquant" },
-      { id: second.id, position: firstDefends ? "attaquant" : "defenseur" },
-    ];
-  }
-
   function generateTeams() {
     if (!data || drawIds.length < 2 || drawIds.length > 4) return setToast("Sélectionnez entre 2 et 4 joueurs.");
-    const uniquePartitions: Array<[string[], string[]]> = [];
-    if (drawIds.length === 2) uniquePartitions.push([[drawIds[0]], [drawIds[1]]]);
-    if (drawIds.length === 3) {
-      drawIds.forEach((solo) => uniquePartitions.push([drawIds.filter((id) => id !== solo), [solo]]));
-    }
-    if (drawIds.length === 4) {
-      for (let i = 1; i < drawIds.length; i++) {
-        uniquePartitions.push([[drawIds[0], drawIds[i]], drawIds.filter((id) => id !== drawIds[0] && id !== drawIds[i])]);
-      }
-    }
-    const rated = uniquePartitions.map(([redIds, blueIds]) => {
-      const red = assignPositions(redIds);
-      const blue = assignPositions(blueIds);
-      const teamRating = (members: DraftMember[]) => members.reduce((sum, member) => {
-        const player = data.players.find((item) => item.id === member.id)!;
-        return sum + positionalElo(player, member.position);
-      }, 0) / members.length;
-      const gap = Math.round(Math.abs(teamRating(red) - teamRating(blue)));
-      return { red, blue, gap, randomScore: gap + Math.random() * 38 };
-    }).sort((a, b) => a.randomScore - b.randomScore);
-    const choice = rated[Math.floor(Math.random() * Math.min(2, rated.length))];
-    if (Math.random() > .5) setDraw({ red: choice.blue, blue: choice.red, gap: choice.gap });
-    else setDraw({ red: choice.red, blue: choice.blue, gap: choice.gap });
+    const selected = drawIds.map((id) => data.players.find((player) => player.id === id)!);
+    setDraw(balanceGroup(selected));
   }
 
   function useDraw() {
@@ -595,10 +571,9 @@ function StatsView({ players, matches, stats, sideStats, onPlayer }: { players: 
       <div className="stats-panel-header"><div><p className="eyebrow">PAR JOUEUR</p><h2>Qui gagne de quel côté ?</h2></div><span>tout l’historique</span></div>
       <div className="player-side-head"><span>JOUEUR</span><span>CÔTÉ ROUGE</span><span>CÔTÉ BLEU</span><span>MEILLEUR CÔTÉ</span></div>
       {sideStats.map((item) => {
-        const redPlayerRate = item.red_games ? Math.round(item.red_wins / item.red_games * 100) : 0;
-        const bluePlayerRate = item.blue_games ? Math.round(item.blue_wins / item.blue_games * 100) : 0;
-        const enoughData = item.red_games + item.blue_games > 0;
-        const bestSide = !enoughData ? "À tester" : Math.abs(redPlayerRate - bluePlayerRate) < 10 ? "Équilibré" : redPlayerRate > bluePlayerRate ? "Rouge" : "Bleu";
+        const redPlayerRate = winRate(item.red_wins, item.red_games);
+        const bluePlayerRate = winRate(item.blue_wins, item.blue_games);
+        const bestSide = preferredSide(item.red_games, item.red_wins, item.blue_games, item.blue_wins);
         const player = players.find((candidate) => candidate.id === item.id);
         return <button className="player-side-row" key={item.id} onClick={() => player && onPlayer(player)}>
           <div><span className="player-avatar">{initials(item.name)}</span><strong>{item.name}</strong></div>
@@ -784,32 +759,17 @@ function EmptyState({ text, action, onClick }: { text: string; action: string; o
   return <div className="empty-state"><span>●</span><p>{text}</p><button onClick={onClick}>{action} →</button></div>;
 }
 
-function positionalElo(player: Player, position: "attaquant" | "defenseur") {
-  return position === "attaquant" ? player.attack_elo : player.defense_elo;
-}
 function eloPreview(players: Player[], draft: typeof emptyDraft) {
   if (!draft.red.length || !draft.blue.length || draft.redScore === draft.blueScore) return null;
-  const teamRating = (members: DraftMember[]) => Math.round(members.reduce((sum, member) => {
-    const player = players.find((item) => item.id === member.id);
-    return sum + (player ? positionalElo(player, member.position) : 1000);
-  }, 0) / members.length);
-  const redRating = teamRating(draft.red);
-  const blueRating = teamRating(draft.blue);
+  const redRating = averageTeamRating(players, draft.red);
+  const blueRating = averageTeamRating(players, draft.blue);
   const redWon = draft.redScore > draft.blueScore;
-  const expectedRed = 1 / (1 + 10 ** ((blueRating - redRating) / 400));
-  const delta = Math.max(1, Math.abs(Math.round(32 * ((redWon ? 1 : 0) - expectedRed))));
+  const delta = calculateEloDelta(redRating, blueRating, redWon);
   const favorite = Math.abs(redRating - blueRating) < 25 ? "Match très équilibré" : redRating > blueRating ? "Rouge part favori" : "Bleu part favori";
   return { delta, message: `${favorite} · ${redRating} vs ${blueRating} Elo poste` };
 }
 function formatOf(match: Match) {
-  const sizes = [match.red.length, match.blue.length].sort((a, b) => b - a);
-  return `${sizes[0]}v${sizes[1]}` as "1v1" | "2v1" | "2v2";
-}
-function playerProfile(player: Player) {
-  const gap = player.attack_elo - player.defense_elo;
-  if (gap >= 80) return "Attaquant";
-  if (gap <= -80) return "Défenseur";
-  return "Polyvalent";
+  return matchFormat(match.red.length, match.blue.length);
 }
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function names(members: Member[]) { return members.map((member) => member.name.split(" ")[0]).join(" & "); }
