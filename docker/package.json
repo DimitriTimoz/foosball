@@ -1,0 +1,11 @@
+{
+  "name": "buroball-container-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "wrangler": "4.118.0"
+  },
+  "overrides": {
+    "undici": "7.29.0"
+  }
+}

@@ -19,8 +19,9 @@ ENV NODE_ENV=production \
     BUROBALL_DATA_DIR=/data \
     WRANGLER_SEND_METRICS=false
 
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./package.json
+COPY docker/package.json docker/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
+
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY docker/wrangler.jsonc ./wrangler.jsonc
