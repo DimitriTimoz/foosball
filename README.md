@@ -27,17 +27,22 @@ database persisted in `/data`.
 ```bash
 docker build -t office-foos .
 docker run --rm -p 3000:3000 \
-  -e BUROBALL_DEMO_MODE=true \
+  -e OFFICE_FOOS_PUBLIC_URL=https://foos.example.com \
   -v office-foos-data:/data \
   office-foos
 ```
 
 The app is then available at `http://localhost:3000`.
 
+Every container start creates a one-time invitation valid for 7 days and prints
+its complete URL in the logs. Set `OFFICE_FOOS_PUBLIC_URL` to the public origin
+used by coworkers; it defaults to `http://localhost:<PORT>`.
+
 Demo mode provides a local identity and sample data without requiring a login.
 Keep it disabled in production so Office Foos uses its built-in username and
 password authentication. Change the port with `-e PORT=8080 -p 8080:8080`.
-Configure the internal persistence path with `BUROBALL_DATA_DIR`.
+Enable demo mode explicitly with `-e BUROBALL_DEMO_MODE=true`. Configure the
+internal persistence path with `BUROBALL_DATA_DIR`.
 
 ## Continuous delivery
 
