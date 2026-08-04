@@ -28,7 +28,7 @@ export default async function Home({
   searchParams: Promise<{ invite?: string | string[] }>;
 }) {
   const user = await getChatGPTUser();
-  const isLocalPreview = process.env.NODE_ENV !== "production";
+  const isLocalPreview = process.env.NODE_ENV !== "production" || process.env.BUROBALL_DEMO_MODE === "true";
   const params = await searchParams;
   const rawInvite = Array.isArray(params.invite) ? params.invite[0] : params.invite;
   const invite = rawInvite && /^[A-Za-z0-9_-]{20,80}$/.test(rawInvite) ? rawInvite : null;

@@ -4,7 +4,7 @@ import { getPlayerByEmail, initializeDatabase } from "@/db/foosball";
 export async function getSession() {
   const user = await getChatGPTUser();
   if (user) return { ...user, isDemo: false };
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" || process.env.BUROBALL_DEMO_MODE === "true") {
     return {
       displayName: "Alex",
       fullName: "Alex Martin",

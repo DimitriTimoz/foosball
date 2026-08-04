@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.vinext
+.wrangler
+dist
+node_modules
+outputs
+work
+.env*
+npm-debug.log*
+Dockerfile*
+README.md
+tsconfig.tsbuildinfo
