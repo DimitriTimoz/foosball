@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashOpaqueToken, hashPassword, normalizeUsername, validatePassword, validateUsername, verifyPassword } from "../lib/password-auth.ts";
+import { PASSWORD_ITERATIONS, hashOpaqueToken, hashPassword, normalizeUsername, validatePassword, validateUsername, verifyPassword } from "../lib/password-auth.ts";
+
+test("the production PBKDF2 cost stays within the hosted runtime limit", () => {
+  assert.equal(PASSWORD_ITERATIONS, 100_000);
+});
 
 test("usernames are normalized and validated", () => {
   assert.equal(normalizeUsername("  Alex.Martin  "), "alex.martin");
@@ -15,8 +19,8 @@ test("password length requirements are enforced", () => {
 });
 
 test("password hashes verify the right password only", async () => {
-  const encoded = await hashPassword("correct-horse", 1_000);
-  assert.match(encoded, /^pbkdf2-sha256\$1000\$/);
+  const encoded = await hashPassword("correct-horse");
+  assert.match(encoded, /^pbkdf2-sha256\$100000\$/);
   assert.equal(await verifyPassword("correct-horse", encoded), true);
   assert.equal(await verifyPassword("wrong-password", encoded), false);
   assert.equal(await verifyPassword("correct-horse", "malformed"), false);

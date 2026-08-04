@@ -1,5 +1,6 @@
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/;
-export const PASSWORD_ITERATIONS = 210_000;
+// The hosted Web Crypto runtime accepts at most 100,000 PBKDF2 iterations.
+export const PASSWORD_ITERATIONS = 100_000;
 
 export function normalizeUsername(value: string) {
   return value.trim().toLocaleLowerCase("en");
