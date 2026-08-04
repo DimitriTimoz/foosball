@@ -6,7 +6,6 @@ type Player = {
   id: string;
   email: string | null;
   name: string;
-  preferred_position: "attaquant" | "defenseur" | "polyvalent";
   elo: number;
   attack_elo: number;
   defense_elo: number;
@@ -121,7 +120,7 @@ export function BuroBallApp() {
       const response = await fetch("/api/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.get("name"), preferredPosition: form.get("position") }),
+        body: JSON.stringify({ name: form.get("name"), preferredPosition: "polyvalent" }),
       });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Impossible d’ajouter ce joueur.");
@@ -159,7 +158,7 @@ export function BuroBallApp() {
       if (!selected && current[side].length >= 2) { setToast("Deux joueurs maximum par côté."); return current; }
       const next = selected
         ? current[side].filter((member) => member.id !== player.id)
-        : [...current[side], { id: player.id, position: player.preferred_position === "defenseur" ? "defenseur" as const : "attaquant" as const }];
+        : [...current[side], { id: player.id, position: player.defense_elo > player.attack_elo ? "defenseur" as const : "attaquant" as const }];
       return { ...current, [side]: next };
     });
   }
@@ -167,10 +166,14 @@ export function BuroBallApp() {
   function assignPositions(ids: string[]): DraftMember[] {
     const members = ids.map((id) => data!.players.find((player) => player.id === id)!);
     if (members.length === 1) {
-      return [{ id: members[0].id, position: members[0].preferred_position === "defenseur" ? "defenseur" : "attaquant" }];
+      return [{ id: members[0].id, position: members[0].defense_elo > members[0].attack_elo ? "defenseur" : "attaquant" }];
     }
-    const defender = [...members].sort((a, b) => roleScore(b, "defenseur") - roleScore(a, "defenseur"))[0];
-    return members.map((member) => ({ id: member.id, position: member.id === defender.id ? "defenseur" : "attaquant" }));
+    const [first, second] = members;
+    const firstDefends = first.defense_elo + second.attack_elo >= first.attack_elo + second.defense_elo;
+    return [
+      { id: first.id, position: firstDefends ? "defenseur" : "attaquant" },
+      { id: second.id, position: firstDefends ? "attaquant" : "defenseur" },
+    ];
   }
 
   function generateTeams() {
@@ -247,7 +250,7 @@ export function BuroBallApp() {
                 <div className="ball-decoration" aria-hidden="true">●</div>
               </div>
               <div className="stat-card dark-card">
-                <div className="stat-top"><span>MON ELO</span><span className="live-dot">● LIVE</span></div>
+                <div className="stat-top"><span>MON ELO · {currentPlayer ? playerProfile(currentPlayer).toUpperCase() : "POLYVALENT"}</span><span className="live-dot">● LIVE</span></div>
                 <strong>{currentPlayer?.elo ?? 1000}</strong>
                 <div className="elo-scale"><i style={{ width: `${Math.min(100, Math.max(12, ((currentPlayer?.elo ?? 1000) - 800) / 6))}%` }} /></div>
                 <div className="role-elos"><span><i>A</i><b>{currentPlayer?.attack_elo ?? 1000}</b></span><span><i>D</i><b>{currentPlayer?.defense_elo ?? 1000}</b></span></div>
@@ -275,7 +278,7 @@ export function BuroBallApp() {
                     <div className="podium-row" key={player.id}>
                       <span className={`rank-number rank-${index + 1}`}>{index + 1}</span>
                       <div className="player-avatar">{initials(player.name)}</div>
-                      <div><strong>{player.name}</strong><small>A {player.attack_elo} · D {player.defense_elo}</small></div>
+                      <div><strong>{player.name}</strong><small>{playerProfile(player)} · A {player.attack_elo} · D {player.defense_elo}</small></div>
                       <b>{player.elo}</b>
                     </div>
                   ))}
@@ -294,7 +297,7 @@ export function BuroBallApp() {
               {data.players.map((player, index) => (
                 <div className="leader-row" key={player.id}>
                   <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
-                  <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong>{player.email === data.user.email && <small>Vous</small>}</div></div>
+                  <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong><small>{player.email === data.user.email ? "Vous · " : ""}{playerProfile(player)}</small></div></div>
                   <span className="position-ratings"><b className="attack-rating">A {player.attack_elo}</b><b className="defense-rating">D {player.defense_elo}</b></span>
                   <span className="record"><b>{player.wins}</b> / {player.losses}</span>
                   <strong className="elo-number">{player.elo}</strong>
@@ -314,7 +317,7 @@ export function BuroBallApp() {
                   {data.players.map((player) => {
                     const selected = drawIds.includes(player.id);
                     return <button key={player.id} className={`select-player ${selected ? "selected" : ""}`} onClick={() => setDrawIds((ids) => selected ? ids.filter((id) => id !== player.id) : ids.length < 4 ? [...ids, player.id] : ids)}>
-                      <span className="check-box">{selected ? "✓" : ""}</span><span className="player-avatar">{initials(player.name)}</span><span><strong>{player.name}</strong><small>{positionLabel(player.preferred_position)}</small></span><b>{player.elo}</b>
+                      <span className="check-box">{selected ? "✓" : ""}</span><span className="player-avatar">{initials(player.name)}</span><span><strong>{player.name}</strong><small>{playerProfile(player)}</small></span><b>{player.elo}</b>
                     </button>;
                   })}
                 </div>
@@ -415,7 +418,7 @@ function PlayerModal({ onClose, onSubmit, busy }: { onClose: () => void; onSubmi
     <form className="modal player-modal" onSubmit={onSubmit}>
       <div className="modal-header"><div><p className="eyebrow">LA LIGUE</p><h2>Ajouter un collègue</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
       <label className="field"><span>Prénom ou nom</span><input name="name" autoFocus required minLength={2} maxLength={40} placeholder="Ex. Manon" /></label>
-      <fieldset><legend>Poste préféré</legend><div className="position-options"><label><input type="radio" name="position" value="attaquant" /><span>⚡<b>Attaquant</b><small>Finition & réflexes</small></span></label><label><input type="radio" name="position" value="defenseur" /><span>◆<b>Défenseur</b><small>Placement & relance</small></span></label><label><input type="radio" name="position" value="polyvalent" defaultChecked /><span>↔<b>Polyvalent</b><small>Partout à l’aise</small></span></label></div></fieldset>
+      <div className="auto-profile-note"><span>↔</span><div><b>Tout le monde joue aux deux postes</b><p>Le profil Attaquant, Défenseur ou Polyvalent sera attribué automatiquement selon les performances.</p></div></div>
       <button className="primary-button full" disabled={busy}>{busy ? "Ajout…" : "Ajouter à la ligue →"}</button>
     </form>
   </div>;
@@ -433,9 +436,11 @@ function EmptyState({ text, action, onClick }: { text: string; action: string; o
 function positionalElo(player: Player, position: "attaquant" | "defenseur") {
   return position === "attaquant" ? player.attack_elo : player.defense_elo;
 }
-function roleScore(player: Player, position: "attaquant" | "defenseur") {
-  const preference = player.preferred_position === position ? 3 : player.preferred_position === "polyvalent" ? 2 : 0;
-  return positionalElo(player, position) + preference * 75;
+function playerProfile(player: Player) {
+  const gap = player.attack_elo - player.defense_elo;
+  if (gap >= 80) return "Attaquant";
+  if (gap <= -80) return "Défenseur";
+  return "Polyvalent";
 }
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function names(members: Member[]) { return members.map((member) => member.name.split(" ")[0]).join(" & "); }

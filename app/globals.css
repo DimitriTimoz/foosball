@@ -208,14 +208,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .field { display: block; }
 .field > span, .player-modal legend { display: block; font-size: 11px; font-weight: 750; margin-bottom: 8px; }
 .field input { width: 100%; height: 48px; border: 1px solid var(--line); background: var(--white); border-radius: 10px; padding: 0 13px; }
-.player-modal fieldset { border: 0; padding: 0; margin: 20px 0; }
-.position-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.position-options input { position: absolute; opacity: 0; }
-.position-options label > span { min-height: 100px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid var(--line); background: var(--white); border-radius: 11px; cursor: pointer; font-size: 18px; }
-.position-options b, .position-options small { display: block; }
-.position-options b { font-size: 11px; margin: 6px 0 2px; }
-.position-options small { font-size: 8px; color: var(--muted); }
-.position-options input:checked + span { border-color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
+.auto-profile-note { display: grid; grid-template-columns: 42px 1fr; gap: 12px; align-items: center; padding: 15px; margin: 18px 0; border: 1px solid #c9d5f3; background: var(--blue-soft); border-radius: 11px; }
+.auto-profile-note > span { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: white; font-size: 20px; }
+.auto-profile-note b { display: block; font-size: 11px; margin-bottom: 4px; }
+.auto-profile-note p { color: #536177; font-size: 9px; line-height: 1.45; margin: 0; }
 .invite-illustration { height: 118px; border-radius: 14px; display: flex; justify-content: center; align-items: center; gap: 25px; background: var(--ink); margin-bottom: 20px; overflow: hidden; }
 .invite-illustration span { font-size: 76px; line-height: 1; }
 .invite-illustration span:first-child { color: var(--red); }
@@ -332,10 +328,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .modal-footer { display: block; }
   .modal-footer p { margin-bottom: 12px; }
   .modal-footer .primary-button { width: 100%; }
-  .position-options { grid-template-columns: 1fr; }
-  .position-options label > span { min-height: 68px; display: grid; grid-template-columns: 35px 1fr; text-align: left; align-content: center; }
-  .position-options b { margin: 0; }
-  .position-options small { grid-column: 2; }
   .draw-actions { grid-template-columns: 1fr; }
   .signin-card { padding: 35px 24px; }
   .brand-large { margin-bottom: 15vh; }
