@@ -246,7 +246,6 @@ export function BuroBallApp() {
     ["stats", "▥", "Stats"],
     ["equipes", "⚖", "Équipes"],
   ] as const;
-  const mobileNavItems = navItems.filter(([id]) => id !== "historique");
 
   return (
     <div className="app-shell">
@@ -361,7 +360,7 @@ export function BuroBallApp() {
       </main>
 
       <nav className="mobile-nav" aria-label="Navigation mobile">
-        {mobileNavItems.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><span>{icon}</span>{label}</button>)}
+        {navItems.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><span>{icon}</span>{label}</button>)}
         <button className="mobile-add" onClick={() => setMatchOpen(true)}><span>＋</span>Match</button>
       </nav>
 
