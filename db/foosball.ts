@@ -186,13 +186,13 @@ export async function getDashboard() {
     .prepare("SELECT * FROM players ORDER BY elo DESC, wins DESC, name ASC")
     .all();
   const matchesResult = await db
-    .prepare("SELECT * FROM matches ORDER BY created_at DESC LIMIT 12")
+    .prepare("SELECT * FROM matches ORDER BY created_at DESC LIMIT 50")
     .all();
   const memberResult = await db
     .prepare(
       `SELECT mp.match_id, mp.side, mp.position, p.id, p.name
        FROM match_players mp JOIN players p ON p.id = mp.player_id
-       WHERE mp.match_id IN (SELECT id FROM matches ORDER BY created_at DESC LIMIT 12)
+       WHERE mp.match_id IN (SELECT id FROM matches ORDER BY created_at DESC LIMIT 50)
        ORDER BY mp.side, mp.position`,
     )
     .all();

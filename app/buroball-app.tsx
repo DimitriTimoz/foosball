@@ -35,11 +35,14 @@ export function BuroBallApp() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [access, setAccess] = useState<"loading" | "joining" | "required" | "allowed">("loading");
   const [inviteError, setInviteError] = useState("");
-  const [view, setView] = useState<"accueil" | "classement" | "equipes">("accueil");
+  const [view, setView] = useState<"accueil" | "classement" | "historique" | "equipes">("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyFormat, setHistoryFormat] = useState<"tous" | "1v1" | "2v1" | "2v2">("tous");
   const [draft, setDraft] = useState(emptyDraft);
   const [drawIds, setDrawIds] = useState<string[]>([]);
   const [draw, setDraw] = useState<Draw | null>(null);
@@ -78,7 +81,7 @@ export function BuroBallApp() {
 
   useEffect(() => { load().catch((error) => { setToast(error.message); setAccess("required"); }); }, [load]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setSelectedPlayer(null); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -209,6 +212,16 @@ export function BuroBallApp() {
     setMatchOpen(true);
   }
 
+  function replayMatch(match: Match) {
+    setDraft({
+      red: match.red.map((member) => ({ id: member.id, position: member.position })),
+      blue: match.blue.map((member) => ({ id: member.id, position: member.position })),
+      redScore: 10,
+      blueScore: 7,
+    });
+    setMatchOpen(true);
+  }
+
   if (!data && access === "required") {
     return <InvitationRequired error={inviteError} />;
   }
@@ -220,6 +233,7 @@ export function BuroBallApp() {
   const navItems = [
     ["accueil", "⌂", "Accueil"],
     ["classement", "↗", "Classement"],
+    ["historique", "◷", "Historique"],
     ["equipes", "⚖", "Équipes"],
   ] as const;
 
@@ -268,19 +282,19 @@ export function BuroBallApp() {
               <div className="panel recent-panel">
                 <div className="section-heading"><div><p className="eyebrow">ACTIVITÉ</p><h2>Derniers matchs</h2></div><button onClick={() => setMatchOpen(true)}>Ajouter ＋</button></div>
                 <div className="match-list">
-                  {data.matches.length ? data.matches.slice(0, 6).map((match) => <MatchRow key={match.id} match={match} />) : <EmptyState text="Aucun match pour le moment." action="Enregistrer le premier" onClick={() => setMatchOpen(true)} />}
+                  {data.matches.length ? data.matches.slice(0, 6).map((match) => <MatchRow key={match.id} match={match} onReplay={replayMatch} />) : <EmptyState text="Aucun match pour le moment." action="Enregistrer le premier" onClick={() => setMatchOpen(true)} />}
                 </div>
               </div>
               <div className="panel podium-panel">
                 <div className="section-heading"><div><p className="eyebrow">TOP JOUEURS</p><h2>Le podium</h2></div><button onClick={() => setView("classement")}>Tout voir</button></div>
                 <div className="podium-list">
                   {data.players.slice(0, 3).map((player, index) => (
-                    <div className="podium-row" key={player.id}>
+                    <button className="podium-row" key={player.id} onClick={() => setSelectedPlayer(player)}>
                       <span className={`rank-number rank-${index + 1}`}>{index + 1}</span>
                       <div className="player-avatar">{initials(player.name)}</div>
                       <div><strong>{player.name}</strong><small>{playerProfile(player)} · A {player.attack_elo} · D {player.defense_elo}</small></div>
                       <b>{player.elo}</b>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <button className="secondary-button full" onClick={() => setView("equipes")}>⚖ Composer des équipes équilibrées</button>
@@ -295,17 +309,19 @@ export function BuroBallApp() {
             <div className="leaderboard panel">
               <div className="table-head"><span>RANG</span><span>JOUEUR</span><span>ELO PAR POSTE</span><span>V / D</span><span>GÉNÉRAL</span></div>
               {data.players.map((player, index) => (
-                <div className="leader-row" key={player.id}>
+                <button className="leader-row" key={player.id} onClick={() => setSelectedPlayer(player)}>
                   <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
                   <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong><small>{player.email === data.user.email ? "Vous · " : ""}{playerProfile(player)}</small></div></div>
                   <span className="position-ratings"><b className="attack-rating">A {player.attack_elo}</b><b className="defense-rating">D {player.defense_elo}</b></span>
                   <span className="record"><b>{player.wins}</b> / {player.losses}</span>
                   <strong className="elo-number">{player.elo}</strong>
-                </div>
+                </button>
               ))}
             </div>
           </section>
         )}
+
+        {view === "historique" && <HistoryView matches={data.matches} query={historyQuery} format={historyFormat} setQuery={setHistoryQuery} setFormat={setHistoryFormat} onReplay={replayMatch} onNew={() => setMatchOpen(true)} />}
 
         {view === "equipes" && (
           <section className="page-section team-builder-page">
@@ -339,9 +355,66 @@ export function BuroBallApp() {
       {matchOpen && <MatchModal players={data.players} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
       {playerOpen && <PlayerModal onClose={() => setPlayerOpen(false)} onSubmit={submitPlayer} busy={busy} />}
       {inviteOpen && <InviteModal link={inviteLink} busy={busy} onCreate={createInvite} onCopy={copyInvite} onClose={() => setInviteOpen(false)} />}
+      {selectedPlayer && <PlayerProfileModal player={selectedPlayer} rank={data.players.findIndex((item) => item.id === selectedPlayer.id) + 1} matches={data.matches} onReplay={replayMatch} onClose={() => setSelectedPlayer(null)} />}
       {toast && <div className="toast" role="status"><span>●</span>{toast}</div>}
     </div>
   );
+}
+
+function HistoryView({ matches, query, format, setQuery, setFormat, onReplay, onNew }: {
+  matches: Match[];
+  query: string;
+  format: "tous" | "1v1" | "2v1" | "2v2";
+  setQuery: (value: string) => void;
+  setFormat: (value: "tous" | "1v1" | "2v1" | "2v2") => void;
+  onReplay: (match: Match) => void;
+  onNew: () => void;
+}) {
+  const normalized = query.trim().toLocaleLowerCase("fr");
+  const filtered = matches.filter((match) => {
+    const matchFormat = formatOf(match);
+    const namesInMatch = [...match.red, ...match.blue].map((member) => member.name).join(" ").toLocaleLowerCase("fr");
+    return (format === "tous" || matchFormat === format) && (!normalized || namesInMatch.includes(normalized));
+  });
+  const totalGoals = matches.reduce((sum, match) => sum + match.red_score + match.blue_score, 0);
+  const closest = matches.filter((match) => Math.abs(match.red_score - match.blue_score) <= 2).length;
+  return <section className="page-section history-page">
+    <div className="page-title"><div><p className="eyebrow">TOUS LES MATCHS</p><h1>Historique</h1><p>Retrouvez une rencontre et relancez la revanche en un clic.</p></div><button className="primary-button" onClick={onNew}>＋ Nouveau match</button></div>
+    <div className="history-stats">
+      <div><span>MATCHS</span><strong>{matches.length}</strong></div>
+      <div><span>BUTS MARQUÉS</span><strong>{totalGoals}</strong></div>
+      <div><span>MATCHS SERRÉS</span><strong>{closest}</strong></div>
+    </div>
+    <div className="history-toolbar panel">
+      <label className="history-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un joueur…" aria-label="Rechercher dans l’historique" /></label>
+      <div className="format-filters">{(["tous", "1v1", "2v1", "2v2"] as const).map((item) => <button key={item} className={format === item ? "active" : ""} onClick={() => setFormat(item)}>{item === "tous" ? "Tous" : item}</button>)}</div>
+    </div>
+    <div className="panel history-list">
+      {filtered.length ? filtered.map((match) => <MatchRow key={match.id} match={match} onReplay={onReplay} showFormat />) : <EmptyState text="Aucun match ne correspond à cette recherche." action="Effacer les filtres" onClick={() => { setQuery(""); setFormat("tous"); }} />}
+    </div>
+  </section>;
+}
+
+function PlayerProfileModal({ player, rank, matches, onReplay, onClose }: { player: Player; rank: number; matches: Match[]; onReplay: (match: Match) => void; onClose: () => void }) {
+  const playerMatches = matches.filter((match) => [...match.red, ...match.blue].some((member) => member.id === player.id));
+  const winRate = player.games ? Math.round(player.wins / player.games * 100) : 0;
+  const maxRoleElo = Math.max(player.attack_elo, player.defense_elo, 1100);
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <div className="modal-header"><div><p className="eyebrow">PROFIL JOUEUR · #{rank}</p><h2 id="profile-title">{player.name}</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
+      <div className="profile-hero">
+        <div className="profile-avatar">{initials(player.name)}</div>
+        <div><span className="profile-badge">{playerProfile(player)}</span><strong>{player.elo}</strong><small>Elo général</small></div>
+        <div className="win-ring" style={{ "--win-rate": `${winRate * 3.6}deg` } as React.CSSProperties}><span>{winRate}%</span><small>victoires</small></div>
+      </div>
+      <div className="role-comparison">
+        <div><span><i className="attack-dot" />Attaque <b>{player.attack_elo}</b></span><div><i className="attack-bar" style={{ width: `${Math.max(12, player.attack_elo / maxRoleElo * 100)}%` }} /></div></div>
+        <div><span><i className="defense-dot" />Défense <b>{player.defense_elo}</b></span><div><i className="defense-bar" style={{ width: `${Math.max(12, player.defense_elo / maxRoleElo * 100)}%` }} /></div></div>
+      </div>
+      <div className="profile-numbers"><span><b>{player.games}</b><small>matchs</small></span><span><b>{player.wins}</b><small>victoires</small></span><span><b>{player.losses}</b><small>défaites</small></span></div>
+      <div className="profile-recent"><div className="profile-section-title"><strong>Matchs récents</strong><span>{playerMatches.length} affichés</span></div>{playerMatches.slice(0, 4).map((match) => <MatchRow key={match.id} match={match} onReplay={(item) => { onClose(); onReplay(item); }} />)}</div>
+    </section>
+  </div>;
 }
 
 function InvitationRequired({ error }: { error: string }) {
@@ -374,13 +447,14 @@ function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; 
   </div>;
 }
 
-function MatchRow({ match }: { match: Match }) {
+function MatchRow({ match, onReplay, showFormat = false }: { match: Match; onReplay?: (match: Match) => void; showFormat?: boolean }) {
   const redWon = match.red_score > match.blue_score;
   return <article className="match-row">
     <div className={`result-badge ${redWon ? "red-win" : "blue-win"}`}>{redWon ? "R" : "B"}</div>
-    <div className="match-teams"><strong>{names(match.red)}</strong><span>vs</span><strong>{names(match.blue)}</strong><small>{relativeDate(match.created_at)}</small></div>
+    <div className="match-teams"><strong>{names(match.red)}</strong><span>vs</span><strong>{names(match.blue)}</strong><small>{relativeDate(match.created_at)}{showFormat ? ` · ${formatOf(match)}` : ""}</small></div>
     <div className="match-score"><span className="red-text">{match.red_score}</span><i>—</i><span className="blue-text">{match.blue_score}</span></div>
     <div className="elo-change">±{match.elo_delta}</div>
+    {onReplay && <button className="replay-button" onClick={() => onReplay(match)} title="Rejouer ce match" aria-label="Rejouer ce match">↻</button>}
   </article>;
 }
 
@@ -393,24 +467,34 @@ function MatchModal({ players, draft, setDraft, toggleMember, onClose, onSubmit,
   onSubmit: (event: React.FormEvent) => void;
   busy: boolean;
 }) {
+  const [search, setSearch] = useState("");
+  const visiblePlayers = players.filter((player) => player.name.toLocaleLowerCase("fr").includes(search.trim().toLocaleLowerCase("fr")));
+  const preview = eloPreview(players, draft);
+  const format = draft.red.length && draft.blue.length ? `${draft.red.length}v${draft.blue.length}` : "À compléter";
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <form className="modal match-modal" onSubmit={onSubmit}>
-      <div className="modal-header"><div><p className="eyebrow">NOUVEAU MATCH</p><h2>Qui a gagné ?</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
+      <div className="modal-header"><div><p className="eyebrow">NOUVEAU MATCH · {format}</p><h2>Qui a gagné ?</h2></div><button type="button" onClick={onClose} aria-label="Fermer">×</button></div>
       <div className="score-entry">
-        <label className="score-side red-side"><span>ROUGE</span><input aria-label="Score rouge" type="number" min="0" max="99" value={draft.redScore} onChange={(e) => setDraft((d) => ({ ...d, redScore: Number(e.target.value) }))} /></label>
+        <ScoreControl side="red" value={draft.redScore} onChange={(value) => setDraft((d) => ({ ...d, redScore: value }))} />
         <span className="score-separator">—</span>
-        <label className="score-side blue-side"><span>BLEU</span><input aria-label="Score bleu" type="number" min="0" max="99" value={draft.blueScore} onChange={(e) => setDraft((d) => ({ ...d, blueScore: Number(e.target.value) }))} /></label>
+        <ScoreControl side="blue" value={draft.blueScore} onChange={(value) => setDraft((d) => ({ ...d, blueScore: value }))} />
       </div>
+      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un joueur…" aria-label="Rechercher un joueur" /></label><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Inverser les côtés</button></div>
       <div className="team-pickers">
         {(["red", "blue"] as const).map((side) => <div key={side} className={`team-picker ${side}`}>
           <div className="picker-title"><strong>Équipe {side === "red" ? "rouge" : "bleue"}</strong><span>{draft[side].length}/2</span></div>
-          <div className="picker-players">{players.map((player) => <button type="button" key={player.id} className={draft[side].some((m) => m.id === player.id) ? "picked" : ""} onClick={() => toggleMember(side, player)}><span>{initials(player.name)}</span>{player.name}<i>{draft[side].some((m) => m.id === player.id) ? "✓" : "+"}</i></button>)}</div>
+          <div className="picker-players">{visiblePlayers.map((player) => <button type="button" key={player.id} className={draft[side].some((m) => m.id === player.id) ? "picked" : ""} onClick={() => toggleMember(side, player)}><span>{initials(player.name)}</span>{player.name}<i>{draft[side].some((m) => m.id === player.id) ? "✓" : "+"}</i></button>)}</div>
           {draft[side].map((member) => <label className="position-select" key={member.id}><span>{players.find((p) => p.id === member.id)?.name}</span><select value={member.position} onChange={(e) => setDraft((d) => ({ ...d, [side]: d[side].map((m) => m.id === member.id ? { ...m, position: e.target.value as DraftMember["position"] } : m) }))}><option value="attaquant">Attaquant</option><option value="defenseur">Défenseur</option></select></label>)}
         </div>)}
       </div>
-      <div className="modal-footer"><p>L’Elo est calculé selon le niveau moyen de chaque équipe.</p><button className="primary-button" disabled={busy || !draft.red.length || !draft.blue.length}>{busy ? "Enregistrement…" : "Valider le match →"}</button></div>
+      <div className="modal-footer"><p>{preview ? <><b>Impact estimé : ±{preview.delta} Elo</b><span>{preview.message}</span></> : <>Sélectionnez les deux équipes pour prévisualiser l’impact Elo.</>}</p><button className="primary-button" disabled={busy || !draft.red.length || !draft.blue.length || draft.redScore === draft.blueScore}>{busy ? "Enregistrement…" : "Valider le match →"}</button></div>
     </form>
   </div>;
+}
+
+function ScoreControl({ side, value, onChange }: { side: "red" | "blue"; value: number; onChange: (value: number) => void }) {
+  const label = side === "red" ? "ROUGE" : "BLEU";
+  return <div className={`score-side ${side}-side`}><span>{label}</span><div><button type="button" onClick={() => onChange(Math.max(0, value - 1))} aria-label={`Retirer un point à l’équipe ${label.toLowerCase()}`}>−</button><input aria-label={`Score ${label.toLowerCase()}`} type="number" min="0" max="99" value={value} onChange={(event) => onChange(Math.max(0, Math.min(99, Number(event.target.value))))} /><button type="button" onClick={() => onChange(Math.min(99, value + 1))} aria-label={`Ajouter un point à l’équipe ${label.toLowerCase()}`}>＋</button></div></div>;
 }
 
 function PlayerModal({ onClose, onSubmit, busy }: { onClose: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; busy: boolean }) {
@@ -435,6 +519,24 @@ function EmptyState({ text, action, onClick }: { text: string; action: string; o
 
 function positionalElo(player: Player, position: "attaquant" | "defenseur") {
   return position === "attaquant" ? player.attack_elo : player.defense_elo;
+}
+function eloPreview(players: Player[], draft: typeof emptyDraft) {
+  if (!draft.red.length || !draft.blue.length || draft.redScore === draft.blueScore) return null;
+  const teamRating = (members: DraftMember[]) => Math.round(members.reduce((sum, member) => {
+    const player = players.find((item) => item.id === member.id);
+    return sum + (player ? positionalElo(player, member.position) : 1000);
+  }, 0) / members.length);
+  const redRating = teamRating(draft.red);
+  const blueRating = teamRating(draft.blue);
+  const redWon = draft.redScore > draft.blueScore;
+  const expectedRed = 1 / (1 + 10 ** ((blueRating - redRating) / 400));
+  const delta = Math.max(1, Math.abs(Math.round(32 * ((redWon ? 1 : 0) - expectedRed))));
+  const favorite = Math.abs(redRating - blueRating) < 25 ? "Match très équilibré" : redRating > blueRating ? "Rouge part favori" : "Bleu part favori";
+  return { delta, message: `${favorite} · ${redRating} vs ${blueRating} Elo poste` };
+}
+function formatOf(match: Match) {
+  const sizes = [match.red.length, match.blue.length].sort((a, b) => b - a);
+  return `${sizes[0]}v${sizes[1]}` as "1v1" | "2v1" | "2v2";
 }
 function playerProfile(player: Player) {
   const gap = player.attack_elo - player.defense_elo;
