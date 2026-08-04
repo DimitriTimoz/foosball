@@ -64,12 +64,13 @@ type TournamentDetail = {
   standings: TournamentStanding[];
   matches: TournamentGame[];
 };
+type View = "accueil" | "classement" | "historique" | "stats" | "equipes" | "tournois";
 
 const emptyDraft = { red: [] as DraftMember[], blue: [] as DraftMember[], redScore: 10, blueScore: 7 };
 
 export function OfficeFoosApp() {
   const [data, setData] = useState<Dashboard | null>(null);
-  const [view, setView] = useState<"accueil" | "classement" | "historique" | "stats" | "equipes" | "tournois">("accueil");
+  const [view, setView] = useState<View>("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -82,6 +83,7 @@ export function OfficeFoosApp() {
   const [draw, setDraw] = useState<Draw | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/bootstrap", { cache: "no-store" });
@@ -91,9 +93,12 @@ export function OfficeFoosApp() {
     setData(payload);
   }, []);
 
-  useEffect(() => { load().catch((error) => setToast(error.message)); }, [load]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setSelectedPlayer(null); } };
+    const timeout = window.setTimeout(() => { void load().catch((error) => setToast(error.message)); }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setSelectedPlayer(null); setMobileMenuOpen(false); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -110,6 +115,12 @@ export function OfficeFoosApp() {
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.replace("/");
+  }
+
+  function navigate(nextView: View) {
+    setView(nextView);
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submitMatch(event: React.FormEvent) {
@@ -228,7 +239,7 @@ export function OfficeFoosApp() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setView("accueil")}><span className="brand-ball">●</span> Office Foos</button>
+        <button className="brand" onClick={() => navigate("accueil")}><span className="brand-ball">●</span> Office Foos</button>
         <nav className="desktop-nav" aria-label="Main navigation">
           {navItems.map(([id, , label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}
         </nav>
@@ -237,6 +248,7 @@ export function OfficeFoosApp() {
           <button className="icon-button" aria-label="Add a player" title="Add a player" onClick={() => setPlayerOpen(true)}>＋</button>
           <button className="primary-button compact" onClick={() => setMatchOpen(true)}>＋ <span>New match</span></button>
           <button className="avatar" title={`Sign out @${data.user.username}`} aria-label="Sign out" onClick={() => void signOut()}>{initials(data.user.displayName)}</button>
+          <button className="mobile-menu-trigger" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}><span>•••</span></button>
         </div>
       </header>
 
@@ -346,9 +358,29 @@ export function OfficeFoosApp() {
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><span>{icon}</span>{label}</button>)}
-        <button className="mobile-add" onClick={() => setMatchOpen(true)}><span>＋</span>Match</button>
+        <button className={view === "accueil" ? "active" : ""} onClick={() => navigate("accueil")}><span>⌂</span>Home</button>
+        <button className={view === "classement" ? "active" : ""} onClick={() => navigate("classement")}><span>↗</span>Rank</button>
+        <button className="mobile-add" onClick={() => setMatchOpen(true)}><span>＋</span><b>Match</b></button>
+        <button className={view === "stats" ? "active" : ""} onClick={() => navigate("stats")}><span>▥</span>Stats</button>
+        <button className={mobileMenuOpen || (["historique", "tournois", "equipes"] as View[]).includes(view) ? "active" : ""} onClick={() => setMobileMenuOpen(true)}><span>•••</span>More</button>
       </nav>
+
+      {mobileMenuOpen && <div className="mobile-more-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileMenuOpen(false); }}>
+        <section className="mobile-more-sheet" role="dialog" aria-modal="true" aria-label="More navigation">
+          <div className="sheet-handle" aria-hidden="true" />
+          <div className="mobile-more-head"><div><p className="eyebrow">OFFICE FOOS</p><h2>More</h2></div><button aria-label="Close menu" onClick={() => setMobileMenuOpen(false)}>×</button></div>
+          <div className="mobile-view-grid">
+            <button className={view === "historique" ? "active" : ""} onClick={() => navigate("historique")}><span>◷</span><b>History</b><small>All matches</small></button>
+            <button className={view === "tournois" ? "active" : ""} onClick={() => navigate("tournois")}><span>◆</span><b>Tournaments</b><small>Play together</small></button>
+            <button className={view === "equipes" ? "active" : ""} onClick={() => navigate("equipes")}><span>⚖</span><b>Teams</b><small>Balanced draw</small></button>
+          </div>
+          <div className="mobile-account-actions">
+            <button onClick={() => { setMobileMenuOpen(false); setInviteOpen(true); }}><span>↗</span><b>Invite a coworker</b><i>›</i></button>
+            <button onClick={() => { setMobileMenuOpen(false); setPlayerOpen(true); }}><span>＋</span><b>Add a player</b><i>›</i></button>
+            <button onClick={() => void signOut()}><span>{initials(data.user.displayName)}</span><b>Sign out @{data.user.username}</b><i>›</i></button>
+          </div>
+        </section>
+      </div>}
 
       {matchOpen && <MatchModal players={data.players} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
       {playerOpen && <PlayerModal onClose={() => setPlayerOpen(false)} onSubmit={submitPlayer} busy={busy} />}
@@ -389,7 +421,10 @@ function TournamentView({ players, onLeagueRefresh, onToast }: { players: Player
   }, [loadDetail]);
 
   useEffect(() => {
-    loadTournaments().catch((error) => onToast(error instanceof Error ? error.message : "Unable to load tournaments.")).finally(() => setLoading(false));
+    const timeout = window.setTimeout(() => {
+      void loadTournaments().catch((error) => onToast(error instanceof Error ? error.message : "Unable to load tournaments.")).finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [loadTournaments, onToast]);
 
   async function post(body: Record<string, unknown>, success: string, refreshLeague = false) {
