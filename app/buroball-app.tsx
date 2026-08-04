@@ -25,7 +25,16 @@ type Match = {
   blue: Member[];
 };
 type SessionUser = { displayName: string; email: string; isDemo: boolean };
-type Dashboard = { players: Player[]; matches: Match[]; user: SessionUser };
+type LeagueStats = {
+  total_matches: number;
+  total_goals: number;
+  avg_goals: number;
+  avg_margin: number;
+  red_wins: number;
+  blue_wins: number;
+  close_matches: number;
+};
+type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; user: SessionUser };
 type DraftMember = { id: string; position: "attaquant" | "defenseur" };
 type Draw = { red: DraftMember[]; blue: DraftMember[]; gap: number };
 
@@ -35,7 +44,7 @@ export function BuroBallApp() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [access, setAccess] = useState<"loading" | "joining" | "required" | "allowed">("loading");
   const [inviteError, setInviteError] = useState("");
-  const [view, setView] = useState<"accueil" | "classement" | "historique" | "equipes">("accueil");
+  const [view, setView] = useState<"accueil" | "classement" | "historique" | "stats" | "equipes">("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -234,8 +243,10 @@ export function BuroBallApp() {
     ["accueil", "⌂", "Accueil"],
     ["classement", "↗", "Classement"],
     ["historique", "◷", "Historique"],
+    ["stats", "▥", "Stats"],
     ["equipes", "⚖", "Équipes"],
   ] as const;
+  const mobileNavItems = navItems.filter(([id]) => id !== "historique");
 
   return (
     <div className="app-shell">
@@ -323,6 +334,8 @@ export function BuroBallApp() {
 
         {view === "historique" && <HistoryView matches={data.matches} query={historyQuery} format={historyFormat} setQuery={setHistoryQuery} setFormat={setHistoryFormat} onReplay={replayMatch} onNew={() => setMatchOpen(true)} />}
 
+        {view === "stats" && <StatsView players={data.players} matches={data.matches} stats={data.leagueStats} onPlayer={setSelectedPlayer} />}
+
         {view === "equipes" && (
           <section className="page-section team-builder-page">
             <div className="page-title"><div><p className="eyebrow">TIRAGE ÉQUILIBRÉ</p><h1>Qui joue ?</h1><p>Choisissez 2 à 4 collègues. BuroBall utilise l’Elo de chaque poste pour équilibrer.</p></div></div>
@@ -348,7 +361,7 @@ export function BuroBallApp() {
       </main>
 
       <nav className="mobile-nav" aria-label="Navigation mobile">
-        {navItems.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><span>{icon}</span>{label}</button>)}
+        {mobileNavItems.map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><span>{icon}</span>{label}</button>)}
         <button className="mobile-add" onClick={() => setMatchOpen(true)}><span>＋</span>Match</button>
       </nav>
 
@@ -359,6 +372,83 @@ export function BuroBallApp() {
       {toast && <div className="toast" role="status"><span>●</span>{toast}</div>}
     </div>
   );
+}
+
+function StatsView({ players, matches, stats, onPlayer }: { players: Player[]; matches: Match[]; stats: LeagueStats; onPlayer: (player: Player) => void }) {
+  const [firstId, setFirstId] = useState(players[0]?.id ?? "");
+  const [secondId, setSecondId] = useState(players[1]?.id ?? players[0]?.id ?? "");
+  const recentLabel = matches.length >= 50 ? "50 derniers matchs" : `${matches.length} match${matches.length > 1 ? "s" : ""} chargé${matches.length > 1 ? "s" : ""}`;
+  const redRate = stats.total_matches ? Math.round(stats.red_wins / stats.total_matches * 100) : 50;
+  const blueRate = stats.total_matches ? 100 - redRate : 50;
+  const formats = (["1v1", "2v1", "2v2"] as const).map((format) => ({ format, count: matches.filter((match) => formatOf(match) === format).length }));
+  const maxFormat = Math.max(1, ...formats.map((item) => item.count));
+  const active = [...players].sort((a, b) => b.games - a.games)[0];
+  const qualified = players.filter((player) => player.games >= 3);
+  const efficient = [...qualified].sort((a, b) => (b.wins / b.games) - (a.wins / a.games))[0] ?? active;
+  const attacker = [...players].sort((a, b) => b.attack_elo - a.attack_elo)[0];
+  const defender = [...players].sort((a, b) => b.defense_elo - a.defense_elo)[0];
+  const first = players.find((player) => player.id === firstId);
+  const second = players.find((player) => player.id === secondId);
+  const duels = first && second && first.id !== second.id ? matches.filter((match) => {
+    const firstSide = match.red.some((member) => member.id === first.id) ? "red" : match.blue.some((member) => member.id === first.id) ? "blue" : null;
+    const secondSide = match.red.some((member) => member.id === second.id) ? "red" : match.blue.some((member) => member.id === second.id) ? "blue" : null;
+    return firstSide && secondSide && firstSide !== secondSide;
+  }) : [];
+  const winsFor = (player: Player | undefined) => player ? duels.filter((match) => {
+    const side = match.red.some((member) => member.id === player.id) ? "red" : "blue";
+    return side === "red" ? match.red_score > match.blue_score : match.blue_score > match.red_score;
+  }).length : 0;
+  const firstWins = winsFor(first);
+  const secondWins = winsFor(second);
+  const records = [
+    { icon: "◷", label: "Le plus actif", player: active, value: active ? `${active.games} matchs` : "—" },
+    { icon: "%", label: "Meilleur taux", player: efficient, value: efficient?.games ? `${Math.round(efficient.wins / efficient.games * 100)}% victoires` : "—" },
+    { icon: "A", label: "Meilleure attaque", player: attacker, value: attacker ? `${attacker.attack_elo} Elo` : "—" },
+    { icon: "D", label: "Meilleure défense", player: defender, value: defender ? `${defender.defense_elo} Elo` : "—" },
+  ];
+
+  return <section className="page-section stats-page">
+    <div className="page-title"><div><p className="eyebrow">LA LIGUE EN CHIFFRES</p><h1>Statistiques</h1><p>Les tendances qui racontent vraiment les matchs du bureau.</p></div></div>
+    <div className="stats-kpis">
+      <div><span>MATCHS JOUÉS</span><strong>{stats.total_matches}</strong><small>depuis le début</small></div>
+      <div><span>BUTS MARQUÉS</span><strong>{stats.total_goals}</strong><small>toutes équipes</small></div>
+      <div><span>BUTS / MATCH</span><strong>{stats.avg_goals}</strong><small>en moyenne</small></div>
+      <div><span>MATCHS SERRÉS</span><strong>{stats.close_matches}</strong><small>écart de 2 ou moins</small></div>
+    </div>
+
+    <div className="stats-grid">
+      <article className="panel stats-panel side-panel">
+        <div className="stats-panel-header"><div><p className="eyebrow">ROUGE OU BLEU ?</p><h2>Avantage du côté</h2></div><span>{stats.total_matches} matchs</span></div>
+        <div className="side-score"><strong className="red-text">{redRate}%</strong><span>des victoires</span><strong className="blue-text">{blueRate}%</strong></div>
+        <div className="balance-track" aria-label={`${redRate}% de victoires rouges et ${blueRate}% de victoires bleues`}><i className="red-balance" style={{ width: `${redRate}%` }} /><i className="blue-balance" style={{ width: `${blueRate}%` }} /></div>
+        <div className="side-legend"><span><i className="red-dot" />Rouge <b>{stats.red_wins}</b></span><span><i className="blue-dot" />Bleu <b>{stats.blue_wins}</b></span></div>
+        <p className="stats-note">Écart moyen au score · <b>{stats.avg_margin} buts</b></p>
+      </article>
+
+      <article className="panel stats-panel">
+        <div className="stats-panel-header"><div><p className="eyebrow">FORMATS</p><h2>Comment on joue</h2></div><span>{recentLabel}</span></div>
+        <div className="format-bars">{formats.map((item) => <div className="format-row" key={item.format}><span>{item.format}</span><div><i style={{ width: `${item.count / maxFormat * 100}%` }} /></div><b>{item.count}</b></div>)}</div>
+        <p className="stats-note">Répartition calculée sur l’historique récent chargé.</p>
+      </article>
+    </div>
+
+    <div className="records-heading"><div><p className="eyebrow">LES RECORDS</p><h2>Qui mène la danse ?</h2></div><span>Minimum 3 matchs pour le taux de victoire</span></div>
+    <div className="record-grid">{records.map((record) => <button key={record.label} className="record-card" disabled={!record.player} onClick={() => record.player && onPlayer(record.player)}><span className="record-icon">{record.icon}</span><small>{record.label}</small><strong>{record.player?.name ?? "Pas encore"}</strong><b>{record.value}</b><i>Voir le profil →</i></button>)}</div>
+
+    <article className="panel stats-panel h2h-panel">
+      <div className="stats-panel-header"><div><p className="eyebrow">FACE-À-FACE</p><h2>Le duel du bureau</h2></div><span>sur l’historique chargé</span></div>
+      <div className="h2h-selectors">
+        <label><span>Joueur 1</span><select value={firstId} onChange={(event) => setFirstId(event.target.value)}>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
+        <b>VS</b>
+        <label><span>Joueur 2</span><select value={secondId} onChange={(event) => setSecondId(event.target.value)}>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
+      </div>
+      {first?.id === second?.id ? <div className="h2h-empty">Choisissez deux joueurs différents.</div> : duels.length ? <div className="h2h-result">
+        <button onClick={() => first && onPlayer(first)}><span className="player-avatar">{initials(first?.name ?? "")}</span><strong>{first?.name}</strong><b>{firstWins}</b><small>victoires</small></button>
+        <div><strong>{duels.length}</strong><span>confrontation{duels.length > 1 ? "s" : ""}</span><i>{firstWins === secondWins ? "Égalité parfaite" : firstWins > secondWins ? `${first?.name} mène` : `${second?.name} mène`}</i></div>
+        <button onClick={() => second && onPlayer(second)}><span className="player-avatar">{initials(second?.name ?? "")}</span><strong>{second?.name}</strong><b>{secondWins}</b><small>victoires</small></button>
+      </div> : <div className="h2h-empty">Ces deux joueurs ne se sont pas encore affrontés dans l’historique récent.</div>}
+    </article>
+  </section>;
 }
 
 function HistoryView({ matches, query, format, setQuery, setFormat, onReplay, onNew }: {
