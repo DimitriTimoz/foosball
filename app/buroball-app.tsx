@@ -34,7 +34,7 @@ type Match = {
   red: Member[];
   blue: Member[];
 };
-type SessionUser = { displayName: string; email: string; isDemo: boolean };
+type SessionUser = { displayName: string; username: string; playerId: string; isDemo: boolean };
 type LeagueStats = {
   total_matches: number;
   total_goals: number;
@@ -45,7 +45,7 @@ type LeagueStats = {
   close_matches: number;
 };
 type PlayerSideStats = { id: string; name: string; red_games: number; red_wins: number; blue_games: number; blue_wins: number };
-type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; sideStats: PlayerSideStats[]; user: SessionUser };
+type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; sideStats: PlayerSideStats[]; user: SessionUser; registeredAccounts: number };
 type DraftMember = { id: string; position: "attaquant" | "defenseur" };
 type Draw = { red: DraftMember[]; blue: DraftMember[]; gap: number };
 type TournamentSummary = {
@@ -68,8 +68,6 @@ const emptyDraft = { red: [] as DraftMember[], blue: [] as DraftMember[], redSco
 
 export function OfficeFoosApp() {
   const [data, setData] = useState<Dashboard | null>(null);
-  const [access, setAccess] = useState<"loading" | "joining" | "required" | "allowed">("loading");
-  const [inviteError, setInviteError] = useState("");
   const [view, setView] = useState<"accueil" | "classement" | "historique" | "stats" | "equipes" | "tournois">("accueil");
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
@@ -85,36 +83,14 @@ export function OfficeFoosApp() {
   const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
-    let response = await fetch("/api/bootstrap", { cache: "no-store" });
-    let payload = (await response.json()) as Dashboard & { error?: string; code?: string };
-    if (response.status === 403 && payload.code === "invite_required") {
-      const token = new URLSearchParams(window.location.search).get("invite");
-      if (!token) {
-        setAccess("required");
-        return;
-      }
-      setAccess("joining");
-      const redeemResponse = await fetch("/api/invitations/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      const redeemPayload = await redeemResponse.json() as { error?: string };
-      if (!redeemResponse.ok) {
-        setInviteError(redeemPayload.error ?? "This invitation can no longer be used.");
-        setAccess("required");
-        return;
-      }
-      window.history.replaceState({}, "", "/");
-      response = await fetch("/api/bootstrap", { cache: "no-store" });
-      payload = (await response.json()) as Dashboard & { error?: string; code?: string };
-    }
+    const response = await fetch("/api/bootstrap", { cache: "no-store" });
+    const payload = (await response.json()) as Dashboard & { error?: string };
+    if (response.status === 401) { window.location.replace("/"); return; }
     if (!response.ok) throw new Error(payload.error ?? "Unable to load Office Foos.");
     setData(payload);
-    setAccess("allowed");
   }, []);
 
-  useEffect(() => { load().catch((error) => { setToast(error.message); setAccess("required"); }); }, [load]);
+  useEffect(() => { load().catch((error) => setToast(error.message)); }, [load]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setSelectedPlayer(null); } };
     window.addEventListener("keydown", onKey);
@@ -126,9 +102,14 @@ export function OfficeFoosApp() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const currentPlayer = data?.players.find((player) => player.email === data.user.email);
+  const currentPlayer = data?.players.find((player) => player.id === data.user.playerId);
   const firstName = (data?.user.displayName ?? "").split(" ")[0];
-  const registeredAccounts = data?.players.filter((player) => player.email).length ?? 0;
+  const registeredAccounts = data?.registeredAccounts ?? 0;
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.replace("/");
+  }
 
   async function submitMatch(event: React.FormEvent) {
     event.preventDefault();
@@ -224,12 +205,8 @@ export function OfficeFoosApp() {
     setMatchOpen(true);
   }
 
-  if (!data && access === "required") {
-    return <InvitationRequired error={inviteError} />;
-  }
-
   if (!data) {
-    return <main className="loading-screen"><div className="loading-brand"><span>●</span> Office Foos</div><div className="loading-bar"><i /></div><p>{access === "joining" ? "Invitation accepted — welcome to the league…" : "Setting up the table…"}</p></main>;
+    return <main className="loading-screen"><div className="loading-brand"><span>●</span> Office Foos</div><div className="loading-bar"><i /></div><p>Setting up the table…</p></main>;
   }
 
   const navItems = [
@@ -252,7 +229,7 @@ export function OfficeFoosApp() {
           <button className="invite-button" onClick={() => setInviteOpen(true)}><span>↗</span> Invite</button>
           <button className="icon-button" aria-label="Add a player" title="Add a player" onClick={() => setPlayerOpen(true)}>＋</button>
           <button className="primary-button compact" onClick={() => setMatchOpen(true)}>＋ <span>New match</span></button>
-          <div className="avatar" title={data.user.displayName}>{initials(data.user.displayName)}</div>
+          <button className="avatar" title={`Sign out @${data.user.username}`} aria-label="Sign out" onClick={() => void signOut()}>{initials(data.user.displayName)}</button>
         </div>
       </header>
 
@@ -321,7 +298,7 @@ export function OfficeFoosApp() {
               {data.players.map((player, index) => (
                 <button className="leader-row" key={player.id} onClick={() => setSelectedPlayer(player)}>
                   <span className="leader-rank">{String(index + 1).padStart(2, "0")}</span>
-                  <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong><small>{player.email === data.user.email ? "You · " : ""}{playerProfile(player)}</small></div></div>
+                  <div className="leader-player"><div className="player-avatar">{initials(player.name)}</div><div><strong>{player.name}</strong><small>{player.id === data.user.playerId ? "You · " : ""}{playerProfile(player)}</small></div></div>
                   <span className="position-ratings"><b className="attack-rating">A {player.attack_elo}</b><b className="defense-rating">D {player.defense_elo}</b></span>
                   <span className="record"><b>{player.wins}</b> / {player.losses}</span>
                   <strong className="elo-number">{player.elo}</strong>
@@ -657,20 +634,6 @@ function PlayerProfileModal({ player, rank, matches, onReplay, onClose }: { play
       <div className="profile-recent"><div className="profile-section-title"><strong>Recent matches</strong><span>{playerMatches.length} shown</span></div>{playerMatches.slice(0, 4).map((match) => <MatchRow key={match.id} match={match} onReplay={(item) => { onClose(); onReplay(item); }} />)}</div>
     </section>
   </div>;
-}
-
-function InvitationRequired({ error }: { error: string }) {
-  return <main className="invite-gate">
-    <section className="invite-gate-card">
-      <div className="brand brand-large"><span className="brand-ball">●</span> Office Foos</div>
-      <div className="gate-lock">↗</div>
-      <p className="eyebrow">PRIVATE LEAGUE</p>
-      <h1>You need<br />an invitation.</h1>
-      <p>{error || "This league is reserved for invited coworkers. Ask an Office Foos member for a new link."}</p>
-      <a className="secondary-button" href="/signout-with-chatgpt?return_to=/">Switch account</a>
-    </section>
-    <aside className="invite-gate-aside" aria-hidden="true"><span>10</span><i>—</i><span>7</span><p>INVITE-ONLY ACCESS</p></aside>
-  </main>;
 }
 
 function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; busy: boolean; onCreate: () => void; onCopy: () => void; onClose: () => void }) {

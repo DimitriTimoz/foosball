@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       redScore: number;
       blueScore: number;
     };
-    const match = await addMatch({ ...body, createdBy: member.user.email });
+    const match = await addMatch({ ...body, createdBy: member.user.username });
     return Response.json({ match }, { status: 201 });
   } catch (error) {
     return Response.json(

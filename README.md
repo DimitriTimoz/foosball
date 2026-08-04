@@ -1,6 +1,6 @@
 # Office Foos
 
-An office foosball leaderboard with invitation-only accounts, 1v1/2v1/2v2
+An office foosball leaderboard with username/password invitation-only accounts, 1v1/2v1/2v2
 matches, global and position-specific Elo ratings, balanced teams, statistics,
 and tournaments.
 
@@ -34,10 +34,10 @@ docker run --rm -p 3000:3000 \
 
 The app is then available at `http://localhost:3000`.
 
-Demo mode provides a local identity and sample data. Keep it disabled behind a
-proxy that injects the ChatGPT identity headers expected by the app. Change the
-port with `-e PORT=8080 -p 8080:8080`. Configure the internal persistence path
-with `BUROBALL_DATA_DIR`.
+Demo mode provides a local identity and sample data without requiring a login.
+Keep it disabled in production so Office Foos uses its built-in username and
+password authentication. Change the port with `-e PORT=8080 -p 8080:8080`.
+Configure the internal persistence path with `BUROBALL_DATA_DIR`.
 
 ## Continuous delivery
 

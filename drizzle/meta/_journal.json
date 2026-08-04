@@ -43,6 +43,13 @@
       "when": 1785864020619,
       "tag": "0005_next_energizer",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785869669188,
+      "tag": "0006_eager_firebird",
+      "breakpoints": true
     }
   ]
 }

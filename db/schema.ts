@@ -14,6 +14,32 @@ export const players = sqliteTable("players", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    playerId: text("player_id").notNull().unique(),
+    username: text("username").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("accounts_username_idx").on(table.username)],
+);
+
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    accountId: text("account_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [
+    index("sessions_account_idx").on(table.accountId),
+    index("sessions_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const invitations = sqliteTable(
   "invitations",
   {

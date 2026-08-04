@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { balanceGroup, calculateEloDelta, splitTournamentGroups, type Position, type RatedMember } from "@/lib/foosball-algorithms";
+import { hashOpaqueToken, hashPassword, randomToken, validatePassword, validateUsername, verifyPassword } from "@/lib/password-auth";
 
 export type Side = "red" | "blue";
 export type MatchMember = RatedMember;
@@ -28,6 +29,19 @@ const schemaStatements = [
     elo_delta INTEGER NOT NULL,
     created_by TEXT NOT NULL,
     created_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    player_id TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS match_players (
     match_id TEXT NOT NULL,
@@ -82,6 +96,9 @@ const schemaStatements = [
   )`,
   "CREATE INDEX IF NOT EXISTS matches_created_at_idx ON matches (created_at DESC)",
   "CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id)",
+  "CREATE INDEX IF NOT EXISTS accounts_username_idx ON accounts (username)",
+  "CREATE INDEX IF NOT EXISTS sessions_account_idx ON sessions (account_id)",
+  "CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at)",
   "CREATE INDEX IF NOT EXISTS invitations_expires_at_idx ON invitations (expires_at)",
   "CREATE INDEX IF NOT EXISTS tournaments_status_idx ON tournaments (status, created_at DESC)",
   "CREATE INDEX IF NOT EXISTS tournament_players_player_idx ON tournament_players (player_id)",
@@ -126,36 +143,85 @@ export async function initializeDatabase() {
   }
 }
 
-export async function ensurePlayer(email: string, name: string) {
-  const db = d1();
-  const existing = await db
-    .prepare("SELECT * FROM players WHERE email = ? LIMIT 1")
-    .bind(email)
-    .first();
-  if (existing) return existing;
-  const id = crypto.randomUUID();
-  await db
-    .prepare(
-      "INSERT INTO players (id, email, name, preferred_position, elo, wins, losses, games, created_at) VALUES (?, ?, ?, 'polyvalent', 1000, 0, 0, 0, ?)",
-    )
-    .bind(id, email, name, Date.now())
-    .run();
-  return db.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
+export async function getPlayerById(id: string) {
+  return d1().prepare("SELECT * FROM players WHERE id = ? LIMIT 1").bind(id).first();
 }
 
-export async function getPlayerByEmail(email: string) {
-  return d1().prepare("SELECT * FROM players WHERE email = ? LIMIT 1").bind(email).first();
+export async function getAccountCount() {
+  const result = await d1().prepare("SELECT COUNT(*) AS count FROM accounts").first<{ count: number }>();
+  return result?.count ?? 0;
 }
 
-export async function ensureInitialMember(email: string, name: string) {
+export async function registerAccount(args: { username: string; password: string; name: string; invitationToken?: string | null }) {
   const db = d1();
-  const existing = await getPlayerByEmail(email);
-  if (existing) return existing;
-  const count = await db
-    .prepare("SELECT COUNT(*) AS count FROM players WHERE email IS NOT NULL")
-    .first<{ count: number }>();
-  if ((count?.count ?? 0) > 0) return null;
-  return ensurePlayer(email, name);
+  const username = validateUsername(args.username);
+  validatePassword(args.password);
+  const name = args.name.trim().replace(/\s+/g, " ");
+  if (name.length < 2 || name.length > 40) throw new Error("Name must contain between 2 and 40 characters.");
+  const duplicate = await db.prepare("SELECT id FROM accounts WHERE username = ? COLLATE NOCASE LIMIT 1").bind(username).first();
+  if (duplicate) throw new Error("This username is already taken.");
+
+  const matchingPlayers = await db.prepare(
+    "SELECT p.id FROM players p LEFT JOIN accounts a ON a.player_id = p.id WHERE a.id IS NULL AND p.name = ? COLLATE NOCASE LIMIT 2",
+  ).bind(name).all<{ id: string }>();
+  const existingPlayerId = matchingPlayers.results.length === 1 ? matchingPlayers.results[0].id : null;
+  const playerId = existingPlayerId ?? crypto.randomUUID();
+  const accountId = crypto.randomUUID();
+  const passwordHash = await hashPassword(args.password);
+  const now = Date.now();
+
+  const firstAccount = (await getAccountCount()) === 0;
+  if (!firstAccount) {
+    const token = args.invitationToken ?? "";
+    if (token.length < 20 || token.length > 80) throw new Error("A valid invitation link is required.");
+    const tokenHash = await hashToken(token);
+    const invitation = await db.prepare("SELECT id FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? LIMIT 1").bind(tokenHash, Date.now()).first<{ id: string }>();
+    if (!invitation) throw new Error("This invitation link has expired or has already been used.");
+    const claimed = await db.prepare("UPDATE invitations SET used_by = ?, used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?").bind(username, Date.now(), invitation.id, Date.now()).run();
+    if ((claimed.meta.changes ?? 0) !== 1) throw new Error("This invitation link was just used.");
+  }
+
+  const statements = [
+    db.prepare("INSERT INTO accounts (id, player_id, username, password_hash, created_at) VALUES (?, ?, ?, ?, ?)").bind(accountId, playerId, username, passwordHash, now),
+  ];
+  if (!existingPlayerId) {
+    statements.unshift(db.prepare("INSERT INTO players (id, email, name, preferred_position, elo, attack_elo, defense_elo, wins, losses, games, created_at) VALUES (?, NULL, ?, 'polyvalent', 1000, 1000, 1000, 0, 0, 0, ?)").bind(playerId, name, now));
+  }
+  await db.batch(statements);
+  return { id: accountId, playerId, username, name };
+}
+
+export async function authenticateAccount(usernameInput: string, password: string) {
+  const username = validateUsername(usernameInput);
+  const account = await d1().prepare(
+    "SELECT a.id, a.player_id, a.username, a.password_hash, p.name FROM accounts a JOIN players p ON p.id = a.player_id WHERE a.username = ? COLLATE NOCASE LIMIT 1",
+  ).bind(username).first<{ id: string; player_id: string; username: string; password_hash: string; name: string }>();
+  if (!account || !(await verifyPassword(password, account.password_hash))) throw new Error("Incorrect username or password.");
+  return { id: account.id, playerId: account.player_id, username: account.username, name: account.name };
+}
+
+export async function createAccountSession(accountId: string) {
+  const token = randomToken();
+  const tokenHash = await hashOpaqueToken(token);
+  const now = Date.now();
+  const expiresAt = now + 30 * 24 * 60 * 60 * 1000;
+  const db = d1();
+  await db.batch([
+    db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),
+    db.prepare("INSERT INTO sessions (token_hash, account_id, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(tokenHash, accountId, now, expiresAt),
+  ]);
+  return token;
+}
+
+export async function getAccountSession(token: string) {
+  const tokenHash = await hashOpaqueToken(token);
+  return d1().prepare(
+    "SELECT a.id AS account_id, a.player_id, a.username, p.name FROM sessions s JOIN accounts a ON a.id = s.account_id JOIN players p ON p.id = a.player_id WHERE s.token_hash = ? AND s.expires_at > ? LIMIT 1",
+  ).bind(tokenHash, Date.now()).first<{ account_id: string; player_id: string; username: string; name: string }>();
+}
+
+export async function deleteAccountSession(token: string) {
+  await d1().prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await hashOpaqueToken(token)).run();
 }
 
 export async function createInvitation(createdBy: string) {
@@ -172,32 +238,6 @@ export async function createInvitation(createdBy: string) {
     .bind(crypto.randomUUID(), tokenHash, createdBy, now, expiresAt)
     .run();
   return { token, expiresAt };
-}
-
-export async function redeemInvitation(token: string, email: string, name: string) {
-  const existing = await getPlayerByEmail(email);
-  if (existing) return existing;
-  if (token.length < 20 || token.length > 80) throw new Error("This invitation link is invalid.");
-  const db = d1();
-  const tokenHash = await hashToken(token);
-  const invitation = await db
-    .prepare(
-      "SELECT id FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? LIMIT 1",
-    )
-    .bind(tokenHash, Date.now())
-    .first<{ id: string }>();
-  if (!invitation) throw new Error("This invitation link has expired or has already been used.");
-
-  const claimed = await db
-    .prepare(
-      "UPDATE invitations SET used_by = ?, used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?",
-    )
-    .bind(email, Date.now(), invitation.id, Date.now())
-    .run();
-  if ((claimed.meta.changes ?? 0) !== 1) {
-    throw new Error("This invitation link was just used.");
-  }
-  return ensurePlayer(email, name);
 }
 
 async function hashToken(token: string) {

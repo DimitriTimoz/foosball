@@ -39,10 +39,10 @@ export async function POST(request: Request) {
   };
   try {
     let tournament;
-    if (body.action === "create") tournament = await createTournament(body.name ?? "", body.playerIds ?? [], member.user.email);
+    if (body.action === "create") tournament = await createTournament(body.name ?? "", body.playerIds ?? [], member.user.username);
     else if (body.action === "add_player") tournament = await addTournamentPlayer(body.tournamentId ?? "", body.playerId ?? "");
     else if (body.action === "remove_player") tournament = await removeTournamentPlayer(body.tournamentId ?? "", body.playerId ?? "");
-    else if (body.action === "record_match") tournament = await recordTournamentMatch(body.tournamentId ?? "", body.tournamentMatchId ?? "", body.redScore ?? -1, body.blueScore ?? -1, member.user.email);
+    else if (body.action === "record_match") tournament = await recordTournamentMatch(body.tournamentId ?? "", body.tournamentMatchId ?? "", body.redScore ?? -1, body.blueScore ?? -1, member.user.username);
     else if (body.action === "next_round") tournament = await createNextTournamentRound(body.tournamentId ?? "");
     else if (body.action === "finish") tournament = await finishTournament(body.tournamentId ?? "");
     else throw new Error("Unknown tournament action.");

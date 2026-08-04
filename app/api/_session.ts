@@ -1,24 +1,32 @@
-import { getChatGPTUser } from "@/app/chatgpt-auth";
-import { getPlayerByEmail, initializeDatabase } from "@/db/foosball";
+import { getAccountSession, getPlayerById, initializeDatabase } from "@/db/foosball";
+import { readSessionToken } from "@/lib/auth-session";
 
 export async function getSession() {
-  const user = await getChatGPTUser();
-  if (user) return { ...user, isDemo: false };
   if (process.env.NODE_ENV !== "production" || process.env.BUROBALL_DEMO_MODE === "true") {
     return {
       displayName: "Alex",
-      fullName: "Alex Martin",
-      email: "alex@buroball.local",
+      username: "alex",
+      playerId: "demo-camille",
       isDemo: true,
     };
   }
-  return null;
+  await initializeDatabase();
+  const token = await readSessionToken();
+  if (!token) return null;
+  const account = await getAccountSession(token);
+  if (!account) return null;
+  return {
+    displayName: account.name,
+    username: account.username,
+    playerId: account.player_id,
+    isDemo: false,
+  };
 }
 
 export async function getMemberSession() {
   const user = await getSession();
   if (!user) return null;
   await initializeDatabase();
-  const player = await getPlayerByEmail(user.email);
+  const player = await getPlayerById(user.playerId);
   return player ? { user, player } : null;
 }
