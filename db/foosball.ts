@@ -247,6 +247,20 @@ export async function getDashboard() {
        FROM matches`,
     )
     .first();
+  const sideStatsResult = await db
+    .prepare(
+      `SELECT p.id, p.name,
+         COALESCE(SUM(CASE WHEN mp.side = 'red' THEN 1 ELSE 0 END), 0) AS red_games,
+         COALESCE(SUM(CASE WHEN mp.side = 'red' AND m.red_score > m.blue_score THEN 1 ELSE 0 END), 0) AS red_wins,
+         COALESCE(SUM(CASE WHEN mp.side = 'blue' THEN 1 ELSE 0 END), 0) AS blue_games,
+         COALESCE(SUM(CASE WHEN mp.side = 'blue' AND m.blue_score > m.red_score THEN 1 ELSE 0 END), 0) AS blue_wins
+       FROM players p
+       LEFT JOIN match_players mp ON mp.player_id = p.id
+       LEFT JOIN matches m ON m.id = mp.match_id
+       GROUP BY p.id, p.name
+       ORDER BY (red_games + blue_games) DESC, p.name ASC`,
+    )
+    .all();
 
   const members = memberResult.results as Array<Record<string, unknown>>;
   const matches = (matchesResult.results as Array<Record<string, unknown>>).map((match) => ({
@@ -255,7 +269,7 @@ export async function getDashboard() {
     blue: members.filter((member) => member.match_id === match.id && member.side === "blue"),
   }));
 
-  return { players: playersResult.results, matches, leagueStats };
+  return { players: playersResult.results, matches, leagueStats, sideStats: sideStatsResult.results };
 }
 
 export async function addMatch(args: {

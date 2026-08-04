@@ -34,7 +34,8 @@ type LeagueStats = {
   blue_wins: number;
   close_matches: number;
 };
-type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; user: SessionUser };
+type PlayerSideStats = { id: string; name: string; red_games: number; red_wins: number; blue_games: number; blue_wins: number };
+type Dashboard = { players: Player[]; matches: Match[]; leagueStats: LeagueStats; sideStats: PlayerSideStats[]; user: SessionUser };
 type DraftMember = { id: string; position: "attaquant" | "defenseur" };
 type Draw = { red: DraftMember[]; blue: DraftMember[]; gap: number };
 type TournamentSummary = {
@@ -356,7 +357,7 @@ export function BuroBallApp() {
 
         {view === "historique" && <HistoryView matches={data.matches} query={historyQuery} format={historyFormat} setQuery={setHistoryQuery} setFormat={setHistoryFormat} onReplay={replayMatch} onNew={() => setMatchOpen(true)} />}
 
-        {view === "stats" && <StatsView players={data.players} matches={data.matches} stats={data.leagueStats} onPlayer={setSelectedPlayer} />}
+        {view === "stats" && <StatsView players={data.players} matches={data.matches} stats={data.leagueStats} sideStats={data.sideStats} onPlayer={setSelectedPlayer} />}
 
         {view === "tournois" && <TournamentView players={data.players} onLeagueRefresh={load} onToast={setToast} />}
 
@@ -527,12 +528,13 @@ function TournamentMatchCard({ match, disabled, onRecord }: { match: TournamentG
   </article>;
 }
 
-function StatsView({ players, matches, stats, onPlayer }: { players: Player[]; matches: Match[]; stats: LeagueStats; onPlayer: (player: Player) => void }) {
+function StatsView({ players, matches, stats, sideStats, onPlayer }: { players: Player[]; matches: Match[]; stats: LeagueStats; sideStats: PlayerSideStats[]; onPlayer: (player: Player) => void }) {
   const [firstId, setFirstId] = useState(players[0]?.id ?? "");
   const [secondId, setSecondId] = useState(players[1]?.id ?? players[0]?.id ?? "");
   const recentLabel = matches.length >= 50 ? "50 derniers matchs" : `${matches.length} match${matches.length > 1 ? "s" : ""} chargé${matches.length > 1 ? "s" : ""}`;
   const redRate = stats.total_matches ? Math.round(stats.red_wins / stats.total_matches * 100) : 50;
   const blueRate = stats.total_matches ? 100 - redRate : 50;
+  const sideLeader = stats.red_wins === stats.blue_wins ? "Égalité entre les deux côtés" : stats.red_wins > stats.blue_wins ? `Le rouge gagne le plus · +${stats.red_wins - stats.blue_wins}` : `Le bleu gagne le plus · +${stats.blue_wins - stats.red_wins}`;
   const formats = (["1v1", "2v1", "2v2"] as const).map((format) => ({ format, count: matches.filter((match) => formatOf(match) === format).length }));
   const maxFormat = Math.max(1, ...formats.map((item) => item.count));
   const active = [...players].sort((a, b) => b.games - a.games)[0];
@@ -575,7 +577,7 @@ function StatsView({ players, matches, stats, onPlayer }: { players: Player[]; m
         <div className="side-score"><strong className="red-text">{redRate}%</strong><span>des victoires</span><strong className="blue-text">{blueRate}%</strong></div>
         <div className="balance-track" aria-label={`${redRate}% de victoires rouges et ${blueRate}% de victoires bleues`}><i className="red-balance" style={{ width: `${redRate}%` }} /><i className="blue-balance" style={{ width: `${blueRate}%` }} /></div>
         <div className="side-legend"><span><i className="red-dot" />Rouge <b>{stats.red_wins}</b></span><span><i className="blue-dot" />Bleu <b>{stats.blue_wins}</b></span></div>
-        <p className="stats-note">Écart moyen au score · <b>{stats.avg_margin} buts</b></p>
+        <p className="stats-note"><b>{sideLeader}</b><span>Écart moyen au score · {stats.avg_margin} buts</span></p>
       </article>
 
       <article className="panel stats-panel">
@@ -584,6 +586,24 @@ function StatsView({ players, matches, stats, onPlayer }: { players: Player[]; m
         <p className="stats-note">Répartition calculée sur l’historique récent chargé.</p>
       </article>
     </div>
+
+    <article className="panel player-side-panel">
+      <div className="stats-panel-header"><div><p className="eyebrow">PAR JOUEUR</p><h2>Qui gagne de quel côté ?</h2></div><span>tout l’historique</span></div>
+      <div className="player-side-head"><span>JOUEUR</span><span>CÔTÉ ROUGE</span><span>CÔTÉ BLEU</span><span>MEILLEUR CÔTÉ</span></div>
+      {sideStats.map((item) => {
+        const redPlayerRate = item.red_games ? Math.round(item.red_wins / item.red_games * 100) : 0;
+        const bluePlayerRate = item.blue_games ? Math.round(item.blue_wins / item.blue_games * 100) : 0;
+        const enoughData = item.red_games + item.blue_games > 0;
+        const bestSide = !enoughData ? "À tester" : Math.abs(redPlayerRate - bluePlayerRate) < 10 ? "Équilibré" : redPlayerRate > bluePlayerRate ? "Rouge" : "Bleu";
+        const player = players.find((candidate) => candidate.id === item.id);
+        return <button className="player-side-row" key={item.id} onClick={() => player && onPlayer(player)}>
+          <div><span className="player-avatar">{initials(item.name)}</span><strong>{item.name}</strong></div>
+          <span className={bestSide === "Rouge" ? "best" : ""}><b>{item.red_games ? `${redPlayerRate}%` : "—"}</b><small>{item.red_wins}/{item.red_games} victoires</small></span>
+          <span className={bestSide === "Bleu" ? "best" : ""}><b>{item.blue_games ? `${bluePlayerRate}%` : "—"}</b><small>{item.blue_wins}/{item.blue_games} victoires</small></span>
+          <strong className={`side-verdict ${bestSide.toLocaleLowerCase("fr")}`}>{bestSide}</strong>
+        </button>;
+      })}
+    </article>
 
     <div className="records-heading"><div><p className="eyebrow">LES RECORDS</p><h2>Qui mène la danse ?</h2></div><span>Minimum 3 matchs pour le taux de victoire</span></div>
     <div className="record-grid">{records.map((record) => <button key={record.label} className="record-card" disabled={!record.player} onClick={() => record.player && onPlayer(record.player)}><span className="record-icon">{record.icon}</span><small>{record.label}</small><strong>{record.player?.name ?? "Pas encore"}</strong><b>{record.value}</b><i>Voir le profil →</i></button>)}</div>
