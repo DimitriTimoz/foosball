@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function AuthScreen({ invitationToken, firstAccount }: { invitationToken: string | null; firstAccount: boolean }) {
   const canRegister = Boolean(invitationToken) || firstAccount;
   const [mode, setMode] = useState<"login" | "register">(canRegister ? "register" : "login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sensitiveKeys = ["password", "confirmPassword", "username", "name"];
+    if (!sensitiveKeys.some((key) => url.searchParams.has(key))) return;
+    sensitiveKeys.forEach((key) => url.searchParams.delete(key));
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,7 +54,8 @@ export function AuthScreen({ invitationToken, firstAccount }: { invitationToken:
       <p className="eyebrow">PRIVATE OFFICE LEAGUE</p>
       <h1>{mode === "register" ? firstAccount ? <>Create the<br />first account.</> : <>Join the<br />league.</> : <>Welcome<br />back.</>}</h1>
       <p className="signin-copy">{mode === "register" ? firstAccount ? "Set up the league owner account. You will then be able to invite your coworkers." : "Choose your username and password to accept this invitation." : "Sign in with your Office Foos username and password."}</p>
-      <form className="auth-form" onSubmit={submit}>
+      <form className="auth-form" method="post" action={`/api/auth/${mode}`} onSubmit={submit}>
+        {invitationToken && <input type="hidden" name="invitationToken" value={invitationToken} />}
         {mode === "register" && <label><span>Display name</span><input name="name" autoComplete="name" minLength={2} maxLength={40} required placeholder="Alex Martin" /></label>}
         <label><span>Username</span><input name="username" autoComplete="username" minLength={3} maxLength={30} required placeholder="alex.martin" autoCapitalize="none" spellCheck={false} /></label>
         <label><span>Password</span><input name="password" type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={10} maxLength={128} required placeholder="At least 10 characters" /></label>

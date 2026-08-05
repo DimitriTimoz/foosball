@@ -8,6 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Office Foos",
   description: "The office foosball leaderboard.",
+  referrer: "no-referrer",
 };
 
 export const viewport: Viewport = {
