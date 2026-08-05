@@ -44,6 +44,18 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    build: {
+      rollupOptions: {
+        output: {
+          assetFileNames: (assetInfo) => {
+            const names = assetInfo.names ?? (assetInfo.name ? [assetInfo.name] : []);
+            return names.some((name) => name.endsWith(".css"))
+              ? "assets/office-foos.css"
+              : "assets/[name]-[hash][extname]";
+          },
+        },
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
