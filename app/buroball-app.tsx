@@ -12,6 +12,7 @@ import {
   preferredSide,
   winRate,
 } from "@/lib/foosball-algorithms";
+import { createRematchDraft } from "@/lib/match-entry";
 
 type Player = {
   id: string;
@@ -87,6 +88,7 @@ export function OfficeFoosApp() {
   const [toast, setToast] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const draftHydrated = useRef(false);
+  const matchSubmissionLocked = useRef(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/bootstrap", { cache: "no-store" });
@@ -158,6 +160,8 @@ export function OfficeFoosApp() {
   async function submitMatch(event: React.FormEvent) {
     event.preventDefault();
     if (!draft.red.length || !draft.blue.length) return setToast("Add at least one player to each side.");
+    if (matchSubmissionLocked.current) return;
+    matchSubmissionLocked.current = true;
     setBusy(true);
     try {
       const response = await fetch("/api/matches", {
@@ -174,7 +178,10 @@ export function OfficeFoosApp() {
       await load();
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Something went wrong.");
-    } finally { setBusy(false); }
+    } finally {
+      matchSubmissionLocked.current = false;
+      setBusy(false);
+    }
   }
 
   async function submitPlayer(event: React.FormEvent<HTMLFormElement>) {
@@ -268,7 +275,7 @@ export function OfficeFoosApp() {
   }
 
   function replayMatch(match: Match) {
-    setDraft(draftFromMatch(match));
+    setDraft(createRematchDraft(match));
     setMatchOpen(true);
   }
 
@@ -819,7 +826,7 @@ function MatchModal({ players, lastMatch, draft, setDraft, toggleMember, onClose
         <span className="score-separator">—</span>
         <ScoreControl side="blue" value={draft.blueScore} onChange={(value) => setDraft((d) => ({ ...d, blueScore: value }))} />
       </div>
-      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><div className="match-tool-actions">{lastMatch && <button type="button" onClick={() => setDraft(draftFromMatch(lastMatch))}>↻ Last lineup</button>}<button type="button" onClick={() => setDraft(emptyDraft)} disabled={!draft.red.length && !draft.blue.length}>Clear</button><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap</button></div></div>
+      <div className="match-tools"><label><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for a player…" aria-label="Search for a player" /></label><div className="match-tool-actions">{lastMatch && <button type="button" onClick={() => setDraft(createRematchDraft(lastMatch))}>↻ Last lineup</button>}<button type="button" onClick={() => setDraft(emptyDraft)} disabled={!draft.red.length && !draft.blue.length}>Clear</button><button type="button" onClick={() => setDraft((d) => ({ red: d.blue, blue: d.red, redScore: d.blueScore, blueScore: d.redScore }))}>⇄ Swap</button></div></div>
       <div className="quick-roster">
         <div className="quick-roster-head"><strong>Tap a side to add a player</strong><span>Positions are optimized automatically</span></div>
         <div className="quick-roster-list">{visiblePlayers.map((player) => {
@@ -906,14 +913,6 @@ function formatOf(match: Match) {
 }
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function names(members: Member[]) { return members.map((member) => member.name.split(" ")[0]).join(" & "); }
-function draftFromMatch(match: Match): typeof emptyDraft {
-  return {
-    red: match.red.map((member) => ({ id: member.id, position: member.position })),
-    blue: match.blue.map((member) => ({ id: member.id, position: member.position })),
-    redScore: 10,
-    blueScore: 7,
-  };
-}
 function positionLabel(position: string) { return position === "defenseur" ? "Defender" : position === "attaquant" ? "Attacker" : "All-rounder"; }
 function relativeDate(timestamp: number) {
   const minutes = Math.round((Date.now() - timestamp) / 60_000);
