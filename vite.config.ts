@@ -50,7 +50,7 @@ export default defineConfig(async () => {
           assetFileNames: (assetInfo) => {
             const names = assetInfo.names ?? (assetInfo.name ? [assetInfo.name] : []);
             return names.some((name) => name.endsWith(".css"))
-              ? "assets/office-foos.css"
+              ? "assets/office-foos-v1.css"
               : "assets/[name]-[hash][extname]";
           },
         },
