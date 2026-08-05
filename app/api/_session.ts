@@ -7,6 +7,7 @@ export async function getSession() {
       displayName: "Alex",
       username: "alex",
       playerId: "demo-camille",
+      accountId: "demo-account",
       isDemo: true,
     };
   }
@@ -19,6 +20,7 @@ export async function getSession() {
     displayName: account.name,
     username: account.username,
     playerId: account.player_id,
+    accountId: account.account_id,
     isDemo: false,
   };
 }

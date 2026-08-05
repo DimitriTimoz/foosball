@@ -200,6 +200,19 @@ export async function authenticateAccount(usernameInput: string, password: strin
   return { id: account.id, playerId: account.player_id, username: account.username, name: account.name };
 }
 
+export async function changeAccountPassword(accountId: string, currentPassword: string, newPassword: string) {
+  validatePassword(newPassword);
+  const db = d1();
+  const account = await db.prepare("SELECT password_hash FROM accounts WHERE id = ? LIMIT 1").bind(accountId).first<{ password_hash: string }>();
+  if (!account || !(await verifyPassword(currentPassword, account.password_hash))) throw new Error("The current password is incorrect.");
+  if (await verifyPassword(newPassword, account.password_hash)) throw new Error("Choose a different password.");
+  const newHash = await hashPassword(newPassword);
+  await db.batch([
+    db.prepare("UPDATE accounts SET password_hash = ? WHERE id = ?").bind(newHash, accountId),
+    db.prepare("DELETE FROM sessions WHERE account_id = ?").bind(accountId),
+  ]);
+}
+
 export async function createAccountSession(accountId: string) {
   const token = randomToken();
   const tokenHash = await hashOpaqueToken(token);

@@ -75,6 +75,7 @@ export function OfficeFoosApp() {
   const [matchOpen, setMatchOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -100,7 +101,7 @@ export function OfficeFoosApp() {
     return () => window.clearTimeout(timeout);
   }, [load]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setSelectedPlayer(null); setMobileMenuOpen(false); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMatchOpen(false); setPlayerOpen(false); setInviteOpen(false); setPasswordOpen(false); setSelectedPlayer(null); setMobileMenuOpen(false); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -196,6 +197,27 @@ export function OfficeFoosApp() {
     } finally { setBusy(false); }
   }
 
+  async function submitPassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const newPassword = String(form.get("newPassword") ?? "");
+    if (newPassword !== String(form.get("confirmPassword") ?? "")) return setToast("New passwords do not match.");
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: form.get("currentPassword"), newPassword }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Unable to change the password.");
+      setPasswordOpen(false);
+      setToast("Password changed · other sessions signed out");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Something went wrong.");
+    } finally { setBusy(false); }
+  }
+
   async function createInvite() {
     setBusy(true);
     try {
@@ -284,6 +306,7 @@ export function OfficeFoosApp() {
         <div className="top-actions">
           <button className="invite-button" onClick={() => setInviteOpen(true)}><span>↗</span> Invite</button>
           <button className="icon-button" aria-label="Add a player" title="Add a player" onClick={() => setPlayerOpen(true)}>＋</button>
+          <button className="icon-button security-button" aria-label="Change password" title="Change password" onClick={() => setPasswordOpen(true)}>⌁</button>
           <button className="primary-button compact" onClick={() => setMatchOpen(true)}>＋ <span>New match</span></button>
           <button className="avatar" title={`Sign out @${data.user.username}`} aria-label="Sign out" onClick={() => void signOut()}>{initials(data.user.displayName)}</button>
           <button className="mobile-menu-trigger" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}><span>•••</span></button>
@@ -425,6 +448,7 @@ export function OfficeFoosApp() {
           <div className="mobile-account-actions">
             <button onClick={() => { setMobileMenuOpen(false); setInviteOpen(true); }}><span>↗</span><b>Invite a coworker</b><i>›</i></button>
             <button onClick={() => { setMobileMenuOpen(false); setPlayerOpen(true); }}><span>＋</span><b>Add a player</b><i>›</i></button>
+            <button onClick={() => { setMobileMenuOpen(false); setPasswordOpen(true); }}><span>⌁</span><b>Change password</b><i>›</i></button>
             <button onClick={() => void signOut()}><span>{initials(data.user.displayName)}</span><b>Sign out @{data.user.username}</b><i>›</i></button>
           </div>
         </section>
@@ -433,6 +457,7 @@ export function OfficeFoosApp() {
       {matchOpen && <MatchModal players={data.players} lastMatch={data.matches[0]} draft={draft} setDraft={setDraft} toggleMember={toggleMember} onClose={() => setMatchOpen(false)} onSubmit={submitMatch} busy={busy} />}
       {playerOpen && <PlayerModal onClose={() => setPlayerOpen(false)} onSubmit={submitPlayer} busy={busy} />}
       {inviteOpen && <InviteModal link={inviteLink} busy={busy} onCreate={createInvite} onCopy={copyInvite} onClose={() => setInviteOpen(false)} />}
+      {passwordOpen && <PasswordModal busy={busy} onSubmit={submitPassword} onClose={() => setPasswordOpen(false)} />}
       {selectedPlayer && <PlayerProfileModal player={selectedPlayer} rank={data.players.findIndex((item) => item.id === selectedPlayer.id) + 1} matches={data.matches} onReplay={replayMatch} onClose={() => setSelectedPlayer(null)} />}
       {toast && <div className="toast" role="status"><span>●</span>{toast}</div>}
     </div>
@@ -839,6 +864,21 @@ function PlayerModal({ onClose, onSubmit, busy }: { onClose: () => void; onSubmi
       <label className="field"><span>First or full name</span><input name="name" autoFocus required minLength={2} maxLength={40} placeholder="e.g. Taylor" /></label>
       <div className="auto-profile-note"><span>↔</span><div><b>Everyone plays both positions</b><p>The Attacker, Defender, or All-rounder profile is assigned automatically based on performance.</p></div></div>
       <button className="primary-button full" disabled={busy}>{busy ? "Adding…" : "Add to the league →"}</button>
+    </form>
+  </div>;
+}
+
+function PasswordModal({ onClose, onSubmit, busy }: { onClose: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; busy: boolean }) {
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="modal player-modal" method="post" action="/api/auth/password" onSubmit={onSubmit}>
+      <div className="modal-header"><div><p className="eyebrow">ACCOUNT SECURITY</p><h2>Change password</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
+      <div className="password-fields">
+        <label className="field"><span>Current password</span><input name="currentPassword" type="password" autoComplete="current-password" required minLength={10} maxLength={128} /></label>
+        <label className="field"><span>New password</span><input name="newPassword" type="password" autoComplete="new-password" required minLength={10} maxLength={128} /></label>
+        <label className="field"><span>Confirm new password</span><input name="confirmPassword" type="password" autoComplete="new-password" required minLength={10} maxLength={128} /></label>
+      </div>
+      <p className="security-note">Changing your password signs out every other active session.</p>
+      <button className="primary-button full" disabled={busy}>{busy ? "Changing…" : "Change password →"}</button>
     </form>
   </div>;
 }

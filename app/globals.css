@@ -514,6 +514,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auto-profile-note > span { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: white; font-size: 20px; }
 .auto-profile-note b { display: block; font-size: 11px; margin-bottom: 4px; }
 .auto-profile-note p { color: #536177; font-size: 9px; line-height: 1.45; margin: 0; }
+.password-fields { display: grid; gap: 14px; }
+.security-note { margin: 16px 0; padding: 12px 14px; border-radius: 10px; background: var(--blue-soft); color: #536177; font-size: 10px; line-height: 1.45; }
 .invite-illustration { height: 118px; border-radius: 14px; display: flex; justify-content: center; align-items: center; gap: 25px; background: var(--ink); margin-bottom: 20px; overflow: hidden; }
 .invite-illustration span { font-size: 76px; line-height: 1; }
 .invite-illustration span:first-child { color: var(--red); }
