@@ -64,7 +64,7 @@ export function AuthScreen({ invitationToken, firstAccount }: { invitationToken:
         <button className="primary-button signin-button" disabled={busy}>{busy ? "Please wait…" : mode === "register" ? "Create account →" : "Sign in →"}</button>
       </form>
       {canRegister && <button className="auth-switch" type="button" onClick={() => { setMode((current) => current === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Use the invitation to create an account" : "Already have an account? Sign in"}</button>}
-      {!canRegister && <p className="signin-note">New accounts require a one-time invitation link.</p>}
+      {!canRegister && <p className="signin-note">New accounts require a valid invitation link.</p>}
     </section>
     <aside className="signin-aside" aria-hidden="true">
       <div className="table-line table-line-one" /><div className="table-line table-line-two" />

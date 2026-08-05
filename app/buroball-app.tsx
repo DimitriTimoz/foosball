@@ -764,13 +764,13 @@ function InviteModal({ link, busy, onCreate, onCopy, onClose }: { link: string; 
     <section className="modal invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
       <div className="modal-header"><div><p className="eyebrow">PRIVATE LEAGUE</p><h2 id="invite-title">Sign-up link</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
       <div className="invite-illustration"><span>●</span><i>→</i><span>●</span></div>
-      <p className="invite-copy">Generate a personal link to create an account in this league. It remains valid for 7 days and can only be used once.</p>
+      <p className="invite-copy">Generate a shared link to let coworkers create their accounts. The same link works for everyone for 7 days.</p>
       {link ? <>
         <label className="field"><span>Invitation link</span><input readOnly value={link} onFocus={(event) => event.currentTarget.select()} /></label>
         <button className="primary-button full" onClick={onCopy}>Copy link</button>
         <button className="text-button" onClick={onCreate} disabled={busy}>Create another link</button>
       </> : <button className="primary-button full" onClick={onCreate} disabled={busy}>{busy ? "Generating…" : "Generate sign-up link →"}</button>}
-      <div className="invite-safety"><b>One-time use</b><span>Once accepted, the link automatically becomes invalid.</span></div>
+      <div className="invite-safety"><b>Reusable for 7 days</b><span>Share it with several coworkers; each person can create one account.</span></div>
     </section>
   </div>;
 }

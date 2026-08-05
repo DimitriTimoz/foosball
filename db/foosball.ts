@@ -175,10 +175,8 @@ export async function registerAccount(args: { username: string; password: string
     const token = args.invitationToken ?? "";
     if (token.length < 20 || token.length > 80) throw new Error("A valid invitation link is required.");
     const tokenHash = await hashToken(token);
-    const invitation = await db.prepare("SELECT id FROM invitations WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? LIMIT 1").bind(tokenHash, Date.now()).first<{ id: string }>();
-    if (!invitation) throw new Error("This invitation link has expired or has already been used.");
-    const claimed = await db.prepare("UPDATE invitations SET used_by = ?, used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?").bind(username, Date.now(), invitation.id, Date.now()).run();
-    if ((claimed.meta.changes ?? 0) !== 1) throw new Error("This invitation link was just used.");
+    const invitation = await db.prepare("SELECT id FROM invitations WHERE token_hash = ? AND expires_at > ? LIMIT 1").bind(tokenHash, Date.now()).first<{ id: string }>();
+    if (!invitation) throw new Error("This invitation link is invalid or has expired.");
   }
 
   const statements = [
