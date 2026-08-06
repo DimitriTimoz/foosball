@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { balanceGroup, calculateEloDelta, splitTournamentGroups, type Position, type RatedMember } from "@/lib/foosball-algorithms";
 import { hashOpaqueToken, hashPassword, randomToken, validatePassword, validateUsername, verifyPassword } from "@/lib/password-auth";
+import { SESSION_MAX_AGE_MS } from "@/lib/session-duration";
 
 export type Side = "red" | "blue";
 export type MatchMember = RatedMember;
@@ -215,7 +216,7 @@ export async function createAccountSession(accountId: string) {
   const token = randomToken();
   const tokenHash = await hashOpaqueToken(token);
   const now = Date.now();
-  const expiresAt = now + 30 * 24 * 60 * 60 * 1000;
+  const expiresAt = now + SESSION_MAX_AGE_MS;
   const db = d1();
   await db.batch([
     db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),

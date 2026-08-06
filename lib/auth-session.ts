@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
+import { SESSION_MAX_AGE_SECONDS } from "@/lib/session-duration";
 
 export const SESSION_COOKIE = "office_foos_session";
-export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export { SESSION_MAX_AGE_SECONDS } from "@/lib/session-duration";
 
 export async function readSessionToken() {
   return (await cookies()).get(SESSION_COOKIE)?.value ?? null;
